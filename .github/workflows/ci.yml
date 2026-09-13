@@ -1,0 +1,26 @@
+# Gates pull requests. Pushes to main are covered by deploy.yml, which runs the
+# same checks before publishing, so the two never both run on one commit.
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # `build` runs tsc first, so this covers the typecheck too.
+      - run: npm run build
