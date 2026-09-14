@@ -17,11 +17,21 @@ export function cum(route: LatLng[]): number[] {
   return c;
 }
 
+/** index i (1 ≤ i < c.length) of the first vertex at or past distance d, by binary search over the cumulative array */
+export function segmentAt(c: number[], d: number): number {
+  let lo = 1, hi = c.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (c[mid] < d) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /** the point a fraction f of the way along the route */
 export function pointAt(route: LatLng[], c: number[], f: number): LatLng {
   const d = f * c[c.length - 1];
-  let i = 1;
-  while (i < c.length - 1 && c[i] < d) i++;
+  const i = segmentAt(c, d);
   const t = (d - c[i - 1]) / Math.max(1e-9, c[i] - c[i - 1]);
   return [
     route[i - 1][0] + (route[i][0] - route[i - 1][0]) * t,

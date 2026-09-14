@@ -1,0 +1,3 @@
+# private resume state of prepare-routes.mjs, plus its temporary files
+.route-data-checkpoint.json
+.route-data-checkpoint.json.*.tmp

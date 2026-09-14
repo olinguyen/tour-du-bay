@@ -32,6 +32,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run test:routes
       # `build` runs tsc first, so this covers the typecheck too.
       - run: npm run build
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
