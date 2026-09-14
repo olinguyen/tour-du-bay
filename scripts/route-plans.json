@@ -1,0 +1,180 @@
+{
+  "profile": "fastbike",
+  "starts": {
+    "mill-valley-depot": { "name": "Mill Valley · Depot Plaza", "coordinate": [-122.5477, 37.9065] },
+    "fairfax-parkade": { "name": "Fairfax · the Parkade", "coordinate": [-122.588334, 37.98716] },
+    "crissy-field-east-beach": { "name": "Crissy Field · East Beach lot", "coordinate": [-122.452, 37.8057] },
+    "orinda-bart": { "name": "Orinda BART", "coordinate": [-122.183681, 37.878488] },
+    "danville-railroad": { "name": "Danville · Railroad Ave at Prospect", "coordinate": [-122.0003, 37.8209] },
+    "berkeley-bart": { "name": "Downtown Berkeley BART", "coordinate": [-122.2676235, 37.8710537] },
+    "woodside-roberts": { "name": "Woodside · Roberts Market", "coordinate": [-122.254385, 37.429608] },
+    "portola-valley-town-center": { "name": "Portola Valley Town Center", "coordinate": [-122.2122, 37.3766] }
+  },
+  "segments": {
+    "mill-valley-camino-alto": {
+      "role": "connector",
+      "via": [[-122.5477, 37.9065], [-122.528708, 37.90049]]
+    },
+    "camino-alto-mill-valley": { "role": "connector", "reverseVia": "mill-valley-camino-alto" },
+    "paradise-loop-clockwise": {
+      "role": "core",
+      "via": [[-122.528708, 37.90049], [-122.525561, 37.916772], [-122.51216, 37.927043], [-122.479229, 37.903084], [-122.459768, 37.893575], [-122.443138, 37.884587], [-122.4487946, 37.8759913], [-122.455805, 37.873571], [-122.528708, 37.90049]]
+    },
+
+    "fairfax-alpine-dam": {
+      "role": "core",
+      "via": [[-122.588334, 37.98716], [-122.624888, 37.963486], [-122.638706, 37.940125]]
+    },
+    "alpine-dam-rock-spring": {
+      "role": "core",
+      "via": [[-122.638706, 37.940125], [-122.612576, 37.910456]]
+    },
+    "rock-spring-east-peak": {
+      "role": "core",
+      "via": [[-122.612576, 37.910456], [-122.594391, 37.926214]]
+    },
+    "east-peak-rock-spring": { "role": "core", "reverseVia": "rock-spring-east-peak" },
+    "rock-spring-pantoll-mill-valley": {
+      "role": "core",
+      "via": [[-122.612576, 37.910456], [-122.604098, 37.904321], [-122.589282, 37.909444], [-122.5572405, 37.8935125], [-122.5585814, 37.8986289], [-122.5569078, 37.9026166], [-122.5509086, 37.9011187], [-122.545051, 37.900178], [-122.5477, 37.9065]]
+    },
+    "mill-valley-fairfax": {
+      "role": "connector",
+      "via": [[-122.5477, 37.9065], [-122.528708, 37.90049], [-122.525561, 37.916772], [-122.535629, 37.93451], [-122.547801, 37.955802], [-122.561767, 37.976393], [-122.588334, 37.98716]]
+    },
+
+    "crissy-bridge-conzelman": {
+      "role": "connector",
+      "via": [[-122.452, 37.8057], [-122.4752, 37.8077], [-122.483633, 37.833785]]
+    },
+    "conzelman-bridge-crissy": { "role": "connector", "reverseVia": "crissy-bridge-conzelman" },
+    "hawk-hill-climb": {
+      "role": "core",
+      "via": [[-122.483633, 37.833785], [-122.4838874, 37.8295043], [-122.4869201, 37.8295183], [-122.4943067, 37.8333681], [-122.4977713, 37.8307097], [-122.4990588, 37.8274506]]
+    },
+    "hawk-hill-rodeo-beach": {
+      "role": "core",
+      "via": [[-122.4990588, 37.8274506], [-122.507893, 37.826078], [-122.529005, 37.823156], [-122.523411, 37.831381], [-122.536923, 37.831911]]
+    },
+    "rodeo-beach-bunker-conzelman": {
+      "role": "core",
+      "via": [[-122.536923, 37.831911], [-122.523411, 37.831381], [-122.506, 37.833], [-122.4832, 37.8367], [-122.483633, 37.833785]]
+    },
+
+    "orinda-bear-creek": {
+      "role": "connector",
+      "via": [[-122.183681, 37.878488], [-122.2085331, 37.9035273]]
+    },
+    "bear-creek-orinda": { "role": "connector", "reverseVia": "orinda-bear-creek" },
+    "three-bears-loop": {
+      "role": "core",
+      "via": [[-122.2085331, 37.9035273], [-122.2629699, 37.9600553], [-122.2432436, 37.9677816], [-122.2019564, 37.9594404], [-122.1758024, 37.9328559], [-122.1644508, 37.9215571], [-122.2085331, 37.9035273]]
+    },
+
+    "danville-south-gate": {
+      "role": "connector",
+      "via": [[-122.0003, 37.8209], [-121.935687, 37.8436192]]
+    },
+    "south-gate-danville": { "role": "connector", "reverseVia": "danville-south-gate" },
+    "diablo-summit": {
+      "role": "core",
+      "via": [[-121.935687, 37.8436192], [-121.9300036, 37.8502548], [-121.9322432, 37.8668034], [-121.9248553, 37.8682741], [-121.9154345, 37.8812352]]
+    },
+    "diablo-descent": { "role": "core", "reverseVia": "diablo-summit" },
+
+    "berkeley-grizzly-skyline-tunnel": {
+      "role": "core",
+      "via": [[-122.2676235, 37.8710537], [-122.265683, 37.878934], [-122.269524, 37.904331], [-122.245833, 37.883004], [-122.22178, 37.879576], [-122.217862, 37.868358], [-122.200642, 37.847595], [-122.214185, 37.856129], [-122.245551, 37.857972], [-122.2676235, 37.8710537]]
+    },
+
+    "woodside-kings-mountain": {
+      "role": "connector",
+      "via": [[-122.254385, 37.429608], [-122.266211, 37.426045]]
+    },
+    "kings-mountain-woodside": { "role": "connector", "reverseVia": "woodside-kings-mountain" },
+    "kings-mountain-skylonda": {
+      "role": "core",
+      "via": [[-122.266211, 37.426045], [-122.2948565, 37.4322165], [-122.313825, 37.424973], [-122.2643, 37.386368]]
+    },
+    "skylonda-coast-tunitas-kings": {
+      "role": "core",
+      "via": [[-122.2643, 37.386368], [-122.2739, 37.32], [-122.386506, 37.326858], [-122.3994809, 37.3588506], [-122.313825, 37.424973], [-122.2948565, 37.4322165], [-122.266211, 37.426045]]
+    },
+
+    "old-la-honda-page-mill-loop": {
+      "role": "core",
+      "via": [[-122.2122, 37.3766], [-122.246467, 37.395933], [-122.248924, 37.39002], [-122.251109, 37.381618], [-122.252552, 37.371884], [-122.232046, 37.348723], [-122.177651, 37.336507], [-122.163728, 37.388157], [-122.1936, 37.383], [-122.2015, 37.3761], [-122.2076, 37.3722], [-122.2122, 37.3766]]
+    }
+  },
+  "itineraries": {
+    "paradise-loop": {
+      "startId": "mill-valley-depot",
+      "parts": ["mill-valley-camino-alto", "paradise-loop-clockwise", "camino-alto-mill-valley"],
+      "references": [
+        "https://marinbike.org/ride-marin/paradise-loop/",
+        "https://www.townoftiburon.org/"
+      ]
+    },
+    "tam-alpine-dam": {
+      "startId": "fairfax-parkade",
+      "parts": ["fairfax-alpine-dam", "alpine-dam-rock-spring", "rock-spring-east-peak", "east-peak-rock-spring", "rock-spring-pantoll-mill-valley", "mill-valley-fairfax"],
+      "references": [
+        "https://www.teamalameda.org/Resources/Documents/RouteSheets/pdfs/Medium/Local/4_56_Alpine%20Dam%20Loop.pdf",
+        "https://pjammcycling.com/climb/350.Mt.%20Tam%20via%20Alpine%20Dam",
+        "https://www.parks.ca.gov/?page_id=471",
+        "https://www.marincounty.gov/departments/public-works?lang=en"
+      ]
+    },
+    "hawk-hill": {
+      "startId": "crissy-field-east-beach",
+      "parts": ["crissy-bridge-conzelman", "hawk-hill-climb", "hawk-hill-rodeo-beach", "rodeo-beach-bunker-conzelman", "conzelman-bridge-crissy"],
+      "references": [
+        "https://www.nps.gov/goga/planyourvisit/marin-headlands-scenic-vistas.htm",
+        "https://www.nps.gov/places/000/hawk-hill-overlook.htm/",
+        "https://www.goldengate.org/bridge/visiting-the-bridge/bikes-pedestrians/",
+        "https://www.nps.gov/goga/planyourvisit/marin-headlands-road-conditions.htm"
+      ]
+    },
+    "three-bears": {
+      "startId": "orinda-bart",
+      "parts": ["orinda-bear-creek", "three-bears-loop", "bear-creek-orinda"],
+      "references": [
+        "https://www.grizz.org/rides/threebears.php",
+        "https://www.bart.gov/stations/orin"
+      ]
+    },
+    "diablo-south-gate": {
+      "startId": "danville-railroad",
+      "parts": ["danville-south-gate", "diablo-summit", "diablo-descent", "south-gate-danville"],
+      "references": [
+        "https://www.parks.ca.gov/?page_id=517",
+        "https://www.mdia.org/visitor-information"
+      ]
+    },
+    "grizzly-peak": {
+      "startId": "berkeley-bart",
+      "parts": ["berkeley-grizzly-skyline-tunnel"],
+      "references": [
+        "https://www.grizz.org/rides/centuryprep.php",
+        "https://www.bart.gov/stations/dbrk"
+      ]
+    },
+    "tunitas-creek": {
+      "startId": "woodside-roberts",
+      "parts": ["woodside-kings-mountain", "kings-mountain-skylonda", "skylonda-coast-tunitas-kings", "kings-mountain-woodside"],
+      "references": [
+        "https://www.pjammcycling.com/climb/49.Tunitas-Creek-Rd",
+        "https://www.smcgov.org/publicworks/road-closures-and-conditions"
+      ]
+    },
+    "old-la-honda": {
+      "startId": "portola-valley-town-center",
+      "parts": ["old-la-honda-page-mill-loop"],
+      "references": [
+        "https://www.pjammcycling.com/climb/44.Old-La-Honda-Rd",
+        "https://www.openspace.org/preserves/monte-bello",
+        "https://www.smcgov.org/publicworks/road-closures-and-conditions"
+      ]
+    }
+  }
+}
