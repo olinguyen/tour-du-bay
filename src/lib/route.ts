@@ -1,7 +1,14 @@
-// Route analysis: pure functions of a ride's profile (+ optional waypoints/finish/hours/feet).
-import type { Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
+// Route analysis: preparing a planned route's geometry, then pure functions of the resulting profile
+// (+ optional waypoints/finish/hours).
+import type { RoutePoint } from '../data/routes.generated';
+import type { LatLng, Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
+import { cum, hav, segmentAt, simplifyIndices } from './geo';
 
-const FT_PER_MI = 5280;
+const FT_PER_MI = 5280, KM_PER_MI = 1.609344, FT_PER_M = 3.28084;
+/** profile sample spacing (km) */
+const SAMPLE_KM = 0.025;
+/** how far the drawn route may stray from the planned one (m) */
+const DRAW_TOLERANCE_M = 3;
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');
@@ -15,38 +22,94 @@ export const hm = (t: number) => {
   return `${Math.floor(m / 60)}:${pad2(m % 60)}`;
 };
 
-/** Smooth a few [miles, feet] keyframes into an n-point profile with a little road-like texture. */
-export function smoothProfile(keys: ProfilePoint[], n = 140): ProfilePoint[] {
-  const total = keys[keys.length - 1][0];
-  const out: ProfilePoint[] = [];
-  for (let i = 0; i < n; i++) {
-    const d = (total * i) / (n - 1);
-    let k = 0;
-    while (k < keys.length - 2 && keys[k + 1][0] < d) k++;
-    const [d0, e0] = keys[k], [d1, e1] = keys[k + 1];
-    const t = (d - d0) / Math.max(1e-6, d1 - d0);
-    const tt = t * t * (3 - 2 * t);
-    let e = e0 + (e1 - e0) * tt;
-    const slope = Math.abs(e1 - e0) / Math.max(0.2, d1 - d0);
-    e += (Math.sin(i * 1.9) * 0.6 + Math.sin(i * 0.53 + 2) * 0.4) * Math.min(60, 8 + slope * 0.05);
-    out.push([d, Math.max(0, e)]);
-  }
-  return out;
+/** height (ft) at distance d (km) along the points, linear between the two nearest by binary search */
+function heightAt(dist: number[], heights: number[], d: number): number {
+  const i = segmentAt(dist, d);
+  const t = Math.max(0, Math.min(1, (d - dist[i - 1]) / (dist[i] - dist[i - 1] || 1)));
+  return heights[i - 1] + (heights[i] - heights[i - 1]) * t;
 }
+
+/**
+ * Prepare a planned route's [lat, lng, ft] points for the guide: drop the duplicate where two parts join, measure it,
+ * and sample the elevation every ~25 m with a short 1-2-1 smoothing window so terrain-model noise is not counted as
+ * hundreds of tiny climbs. The generator validates every point, so a bad one here is a broken file, not a data gap.
+ */
+export function prepareRoute(points: RoutePoint[]): { route: LatLng[]; cum: number[]; profile: ProfilePoint[] } {
+  const pts: RoutePoint[] = [];
+  for (const p of points) {
+    if (!(Array.isArray(p) && p.length === 3 && p.every(Number.isFinite) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)) {
+      throw new Error(`invalid route point ${JSON.stringify(p)}`);
+    }
+    const l = pts[pts.length - 1];
+    if (l && hav([l[0], l[1]], [p[0], p[1]]) < 1e-5) continue;
+    pts.push(p);
+  }
+  if (pts.length < 2) throw new Error('route has no usable points');
+  const full: LatLng[] = pts.map(p => [p[0], p[1]]);
+  // the terrain model dips a foot or two below sea level along the shore; the guide never shows a negative height
+  const fullCum = cum(full), heights = pts.map(p => Math.max(0, p[2]));
+  const span = fullCum[fullCum.length - 1], n = Math.max(1, Math.ceil(span / SAMPLE_KM));
+  const at = (i: number) => (span * i) / n;
+  const samples = Array.from({ length: n + 1 }, (_, i) => heightAt(fullCum, heights, at(i)));
+  const profile: ProfilePoint[] = samples.map((h, i) => [
+    at(i) / KM_PER_MI,
+    i === 0 || i === n ? h : (samples[i - 1] + 2 * h + samples[i + 1]) / 4,
+  ]);
+  // what the map draws: BRouter's every-few-metres vertices are far below what zoom 14 (~7 m/px) can show, and the
+  // preview re-projects the line every frame. The profile above keeps the full data, and the drawn vertices keep
+  // their road distances so a fraction of the ride lands on the same spot on the map and the profile.
+  const keep = simplifyIndices(full, DRAW_TOLERANCE_M);
+  return { route: keep.map(i => full[i]), cum: keep.map(i => fullCum[i]), profile };
+}
+
+/**
+ * Cumulative climbing and descending (ft) at each profile point, with hysteresis: a reversal smaller than the
+ * threshold (10 m) is terrain-model noise, not a climb; once a climb or descent is established it is counted from its
+ * valley or peak, not from where it crossed the threshold. The legs read differences of these, so they always add up
+ * to the totals.
+ */
+export function climbSeries(p: ProfilePoint[], thresholdFt = 10 * FT_PER_M): { gain: number[]; loss: number[] } {
+  const gain = [0], loss = [0];
+  let lo = p[0][1], hi = lo, dir: -1 | 0 | 1 = 0, g = 0, l = 0;
+  for (let i = 1; i < p.length; i++) {
+    const h = p[i][1];
+    if (dir === 1) {
+      if (h > hi) (g += h - hi), (hi = h);
+      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += hi - h);
+    } else if (dir === -1) {
+      if (h < lo) (l += lo - h), (lo = h);
+      else if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - lo);
+    } else {
+      lo = Math.min(lo, h);
+      hi = Math.max(hi, h);
+      if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - lo);
+      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += hi - h);
+    }
+    gain.push(g);
+    loss.push(l);
+  }
+  return { gain, loss };
+}
+
+/** total climbing (ft) of a profile, see climbSeries */
+export const elevationGain = (p: ProfilePoint[], thresholdFt?: number) => climbSeries(p, thresholdFt).gain[p.length - 1];
+
+/** index of the first profile point at or past distance d (miles) */
+const profileAt = (p: ProfilePoint[], d: number) => segmentAt(p, d, q => q[0]);
 
 /** elevation (ft) at fraction f of the profile */
 export function elevAt(p: ProfilePoint[], f: number): number {
-  const d = f * p[p.length - 1][0];
-  let i = 1;
-  while (i < p.length - 1 && p[i][0] < d) i++;
+  const d = f * p[p.length - 1][0], i = profileAt(p, d);
   const t = (d - p[i - 1][0]) / Math.max(1e-9, p[i][0] - p[i - 1][0]);
   return p[i - 1][1] + (p[i][1] - p[i - 1][1]) * t;
 }
 
-/** grade (%) of the profile segment nearest fraction f */
-export function gradeAt(p: ProfilePoint[], f: number): number {
-  const i = Math.min(p.length - 2, Math.max(0, Math.round(f * (p.length - 1))));
-  return ((p[i + 1][1] - p[i][1]) / ((p[i + 1][0] - p[i][0]) * FT_PER_MI)) * 100;
+/** grade (%) around fraction f: the rise over the ~0.1 mi window centred there, so one noisy 25 m sample can't dominate */
+export function gradeAt(p: ProfilePoint[], f: number, windowMi = 0.1): number {
+  const tot = p[p.length - 1][0], d = f * tot;
+  const a = Math.max(0, d - windowMi / 2), b = Math.min(tot, a + windowMi);
+  if (b - a <= 0) return 0;
+  return ((elevAt(p, b / tot) - elevAt(p, a / tot)) / ((b - a) * FT_PER_MI)) * 100;
 }
 
 export function highPoint(r: Ride): { f: number; elev: number } {
@@ -55,37 +118,64 @@ export function highPoint(r: Ride): { f: number; elev: number } {
   return { f: hi[0] / tot, elev: hi[1] };
 }
 
-/** contiguous stretches steeper than minGrade for at least minLen miles → [{a,b}] as fractions of the route */
-export function climbs(r: Ride, minGrade = 0.06, minLen = 0.3): { a: number; b: number }[] {
-  const p = r.profile, tot = p[p.length - 1][0], out: { a: number; b: number }[] = [];
-  let s: number | null = null;
+/** grade (as a fraction) of the profile over the window of GRADE_WINDOW miles ending at point i: samples are ~25 m apart, so a single one says little */
+const GRADE_WINDOW = 0.15;
+function windowGrade(p: ProfilePoint[], i: number): number {
+  const d1 = p[i][0], d0 = Math.max(0, d1 - GRADE_WINDOW), tot = p[p.length - 1][0];
+  return d1 - d0 <= 0 ? 0 : (p[i][1] - elevAt(p, d0 / tot)) / ((d1 - d0) * FT_PER_MI);
+}
+
+/**
+ * Index ranges [i0, i1) where the windowed grade, times `sign`, runs at or above `grade` (in fraction units). A stretch
+ * begins where the window first reaches the grade and ends only once it falls below half of it, so a steady climb
+ * with a brief easing stays one climb; pieces separated by under 0.2 mi are merged, and each kept stretch must be at
+ * least minLen miles with an average of at least three quarters of the grade.
+ */
+function stretches(p: ProfilePoint[], sign: 1 | -1, grade: number, minLen: number): [number, number][] {
+  const raw: [number, number][] = [];
+  let i0: number | null = null;
   for (let i = 1; i < p.length; i++) {
-    const g = (p[i][1] - p[i - 1][1]) / Math.max(1e-9, (p[i][0] - p[i - 1][0]) * FT_PER_MI);
-    if (g >= minGrade) {
-      if (s == null) s = p[i - 1][0];
-    } else if (s != null) {
-      if (p[i - 1][0] - s >= minLen) out.push({ a: s / tot, b: p[i - 1][0] / tot });
-      s = null;
+    const g = sign * windowGrade(p, i);
+    // the window trails the road, so start looking one window back; the snap below finds the valley or peak in it
+    if (i0 == null && g >= grade) i0 = Math.max(0, profileAt(p, p[i][0] - GRADE_WINDOW) - 1);
+    else if (i0 != null && g < grade / 2) {
+      raw.push([i0, i]);
+      i0 = null;
     }
   }
-  if (s != null && tot - s >= minLen) out.push({ a: s / tot, b: 1 });
-  return out;
+  if (i0 != null) raw.push([i0, p.length]);
+  // the trailing window lags the road: a climb is detected after it starts and ends after the top, so pin each
+  // stretch to its lowest and highest points (a climb runs valley to summit, a descent summit to valley)
+  const snapped = raw.map(([a, b]): [number, number] => {
+    let min = a, max = a;
+    for (let i = a; i < b; i++) {
+      if (p[i][1] < p[min][1]) min = i;
+      if (p[i][1] > p[max][1]) max = i;
+    }
+    const [s, e] = sign === 1 ? [min, max] : [max, min];
+    return s < e ? [s, e + 1] : [a, b];
+  });
+  const merged: [number, number][] = [];
+  for (const s of snapped) {
+    const l = merged[merged.length - 1];
+    if (l && p[s[0]][0] - p[l[1] - 1][0] < 0.2) l[1] = s[1];
+    else merged.push(s);
+  }
+  return merged.filter(([a, b]) => {
+    const len = p[b - 1][0] - p[a][0];
+    return len >= minLen && (sign * (p[b - 1][1] - p[a][1])) / (len * FT_PER_MI) >= grade * 0.75;
+  });
+}
+
+/** contiguous stretches steeper than minGrade for at least minLen miles → [{a,b}] as fractions of the route */
+export function climbs(r: Ride, minGrade = 0.06, minLen = 0.3): { a: number; b: number }[] {
+  const p = r.profile, tot = p[p.length - 1][0];
+  return stretches(p, 1, minGrade, minLen).map(([a, b]) => ({ a: p[a][0] / tot, b: p[b - 1][0] / tot }));
 }
 
 /** stretches descending steeper than maxGrade for at least minLen miles, as profile index ranges [i0, i1) */
 export function steepDescents(p: ProfilePoint[], maxGrade = -0.06, minLen = 0.5): [number, number][] {
-  const out: [number, number][] = [];
-  let d0: number | null = null;
-  for (let i = 1; i < p.length; i++) {
-    const g = (p[i][1] - p[i - 1][1]) / ((p[i][0] - p[i - 1][0]) * FT_PER_MI);
-    if (g <= maxGrade) {
-      if (d0 == null) d0 = i - 1;
-    } else if (d0 != null) {
-      if (p[i - 1][0] - p[d0][0] >= minLen) out.push([d0, i]);
-      d0 = null;
-    }
-  }
-  return out;
+  return stretches(p, -1, -maxGrade, minLen);
 }
 
 /** Named points along the route. Candidates carry a priority so the better name wins when two fall within tol of each other. */
@@ -107,9 +197,11 @@ export function waypoints(r: Ride, tol = 0.05): Waypoint[] {
   for (const w of c) {
     const l = out[out.length - 1];
     if (l && w.f - l.f < tol) {
+      // the better-named candidate wins, position included (a short climb's top would otherwise sit at its foot)
       if (w.pr > l.pr) {
         l.name = w.name;
         l.pr = w.pr;
+        l.f = w.f;
       }
       if (w.f === 1) l.f = 1;
       continue;
@@ -134,29 +226,21 @@ function segTime(d: number, rise: number): number {
   return rise / (d * FT_PER_MI) < -0.03 ? d / 22 : d / 13;
 }
 
-/** legs between waypoints with distance, gain, loss and time; calibrated to the ride's stated hours/feet when given */
+/** legs between waypoints with distance, gain, loss (slices of one hysteresis pass, so they add up to the ride's totals) and time; times are calibrated to the ride's stated hours when given */
 export function legs(r: Ride): RouteCard {
   const wp = waypoints(r), p = r.profile, tot = p[p.length - 1][0], L: Leg[] = [];
+  const series = climbSeries(p);
+  // the sample nearest a waypoint stands in for it; the first leg starts at the route's first point
+  const index = (f: number) => (f <= 0 ? 0 : profileAt(p, f * tot));
   for (let i = 1; i < wp.length; i++) {
-    const a = wp[i - 1].f * tot, b = wp[i].f * tot;
-    let gain = 0, loss = 0, t = 0;
-    for (let k = 1; k < p.length; k++) {
-      if (p[k][0] <= a || p[k - 1][0] >= b) continue;
-      const d = p[k][0] - p[k - 1][0], rise = p[k][1] - p[k - 1][1];
-      if (rise > 0) gain += rise;
-      else loss -= rise;
-      t += segTime(d, rise);
-    }
+    const a = wp[i - 1].f * tot, b = wp[i].f * tot, ia = index(wp[i - 1].f), ib = index(wp[i].f);
+    let t = 0;
+    for (let k = ia + 1; k <= ib; k++) t += segTime(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]);
+    const gain = series.gain[ib] - series.gain[ia], loss = series.loss[ib] - series.loss[ia];
     L.push({ a: wp[i - 1].f, b: wp[i].f, from: wp[i - 1].name, to: wp[i].name, mi: b - a, gain, loss, t });
   }
-  const sg = L.reduce((x, l) => x + l.gain, 0);
-  const sl = L.reduce((x, l) => x + l.loss, 0);
   const st = L.reduce((x, l) => x + l.t, 0);
   const H = hoursOf(r), loop = !r.finish;
-  for (const l of L) {
-    if (r.feet && sg) l.gain *= r.feet / sg;
-    if (r.feet && sl && loop) l.loss *= r.feet / sl;
-    if (H && st) l.t *= H / st;
-  }
+  if (H && st) for (const l of L) l.t *= H / st;
   return { wp, legs: L, hours: H || st, loop };
 }

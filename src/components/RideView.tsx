@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { RIDES, ridesIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
-import { areaSlug, fmt, gradeAt, elevAt, hm, legs, pad2, place, roman } from '../lib/route';
+import { areaSlug, fmt, hm, legs, pad2, place, roman } from '../lib/route';
 import { useStore, type Scrub, type Store } from '../lib/store';
-import { ProfileChart } from './ProfileChart';
+import { ProfileChart, scrubParts } from './ProfileChart';
 
 const CARD_KEY = 'bab-card';
 
@@ -40,34 +40,47 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
   const scrubTo = (v: Scrub) => {
     if (!flying) scrub.set(v);
   };
+  // stable so the memoised chart only re-renders when the ride or the leg changes
+  const onScrub = useCallback((f: number | null) => {
+    if (!flying) scrub.set(f == null ? null : { f, soft: false });
+  }, [flying, scrub]);
 
-  const figure = (ph: Photo, i: number) => (
-    <figure
-      key={`ph${i}`}
-      data-i={i}
-      className={hotPhoto === i ? 'hot' : undefined}
-      onMouseEnter={() => {
-        onPhotoHover(i);
-        scrubTo({ f: ph.f, soft: true });
-      }}
-      onMouseLeave={() => {
-        onPhotoHover(null);
-        scrubTo(null);
-      }}
-    >
-      {ph.src ? (
-        <img className="ph" src={ph.src} alt={ph.cap} loading="lazy" />
-      ) : (
-        <div className="ph" aria-hidden="true">
-          <b>photo · {(ph.f * r.miles).toFixed(1)} mi in</b>
-        </div>
-      )}
-      <figcaption>
-        <b>{i + 1}</b>
-        <span>{ph.cap}</span>
-      </figcaption>
-    </figure>
-  );
+  // figures pair with their map pin on hover or keyboard focus
+  const figure = (ph: Photo, i: number) => {
+    const enter = () => {
+      onPhotoHover(i);
+      scrubTo({ f: ph.f, soft: true });
+    };
+    const leave = () => {
+      onPhotoHover(null);
+      scrubTo(null);
+    };
+    return (
+      <figure
+        key={`ph${i}`}
+        data-i={i}
+        className={hotPhoto === i ? 'hot' : undefined}
+        tabIndex={0}
+        aria-label={`Photo ${i + 1}: ${ph.cap}, ${(ph.f * r.lengthMi).toFixed(1)} miles in`}
+        onMouseEnter={enter}
+        onMouseLeave={leave}
+        onFocus={enter}
+        onBlur={leave}
+      >
+        {ph.src ? (
+          <img className="ph" src={ph.src} alt={ph.cap} loading="lazy" />
+        ) : (
+          <div className="ph" aria-hidden="true">
+            <b>photo · {(ph.f * r.lengthMi).toFixed(1)} mi in</b>
+          </div>
+        )}
+        <figcaption>
+          <b aria-hidden="true">{i + 1}</b>
+          <span>{ph.cap}</span>
+        </figcaption>
+      </figure>
+    );
+  };
 
   return (
     <div id="view-ride" className="view enter" data-area={areaSlug(r.area)}>
@@ -100,7 +113,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           <h2>The shape of the day</h2>
           <Readout ride={r} scrub={scrub} />
         </div>
-        <ProfileChart ride={r} card={card} leg={leg} scrub={scrub} onScrub={f => scrubTo(f == null ? null : { f, soft: false })} />
+        <ProfileChart ride={r} card={card} leg={leg} scrub={scrub} onScrub={onScrub} />
         <div className="pf-ends mono">
           <span>{from}</span>
           <span>{r.miles} mi · {r.finish ? place(r.finish) : `back to ${from}`}</span>
@@ -126,34 +139,46 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           <small>{card.legs.length} legs</small>
         </summary>
         <ol>
-          {card.legs.map((l, i) => (
-            <li
-              key={i}
-              data-i={i}
-              className={leg === l ? 'hot' : undefined}
-              onMouseEnter={() => onLeg(l)}
-              onMouseLeave={() => onLeg(null)}
-              onClick={() => scrubTo({ f: l.b, soft: false })}
-            >
-              <b>{roman(i + 1)}</b>
-              <span className="lg">
-                {l.from} <em>→</em> {l.to}
-              </span>
-              <span className="st">
-                <span>{l.mi.toFixed(1)}<i> mi</i></span>
-                <span>
-                  +{fmt(Math.round(l.gain / 10) * 10)}<i> ft</i>
-                  <s>−{fmt(Math.round(l.loss / 10) * 10)}</s>
-                </span>
-                <span>{hm(l.t)}</span>
-              </span>
-            </li>
-          ))}
+          {card.legs.map((l, i) => {
+            const mi = l.mi.toFixed(1), gain = fmt(Math.round(l.gain / 10) * 10), t = hm(l.t);
+            // hover lives on the li so its padding highlights the same as its CSS :hover does
+            return (
+              <li
+                key={i}
+                data-i={i}
+                className={leg === l ? 'hot' : undefined}
+                onMouseEnter={() => onLeg(l)}
+                onMouseLeave={() => onLeg(null)}
+              >
+                <button
+                  type="button"
+                  className="leg"
+                  aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${mi} miles, +${gain} feet, ${t}`}
+                  onFocus={() => onLeg(l)}
+                  onBlur={() => onLeg(null)}
+                  onClick={() => scrubTo({ f: l.b, soft: false })}
+                >
+                  <b>{roman(i + 1)}</b>
+                  <span className="lg">
+                    {l.from} <em>→</em> {l.to}
+                  </span>
+                  <span className="st">
+                    <span>{mi}<i> mi</i></span>
+                    <span>
+                      +{gain}<i> ft</i>
+                      <s>−{fmt(Math.round(l.loss / 10) * 10)}</s>
+                    </span>
+                    <span>{t}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
           <li className="tot">
             <b />
             <span className="lg">{card.loop ? 'Round trip' : 'Point to point'}</span>
             <span className="st">
-              <span>{r.miles}<i> mi</i></span>
+              <span>{r.lengthMi.toFixed(1)}<i> mi</i></span>
               <span>+{fmt(r.feet)}<i> ft</i></span>
               <span>{hm(card.hours)}</span>
             </span>
@@ -200,11 +225,10 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
 function Readout({ ride, scrub }: { ride: Ride; scrub: Store<Scrub> }) {
   const v = useStore(scrub);
   if (!v) return <div className="readout" />;
-  const g = gradeAt(ride.profile, v.f);
+  const p = scrubParts(ride, v.f);
   return (
     <div className="readout">
-      <b>{(v.f * ride.miles).toFixed(1)}</b> mi · <b>{fmt(Math.round(elevAt(ride.profile, v.f)))}</b> ft ·{' '}
-      <b>{g >= 0 ? '+' : '−'}{Math.abs(g).toFixed(1)}%</b>
+      <b>{p.mi}</b> mi · <b>{p.ft}</b> ft · <b>{p.grade}</b>
     </div>
   );
 }

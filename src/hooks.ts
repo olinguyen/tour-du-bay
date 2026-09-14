@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { findRide } from './data/guide';
 import type { Ride } from './data/types';
 import { GuideMap, type GuideMapEvents } from './map/GuideMap';
@@ -34,17 +34,36 @@ export function useHashRoute(): [string | null, (slug: string | null) => void] {
   return [slug, navigate];
 }
 
-export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapEvents): GuideMap | null {
+/** Whether a media query matches, kept live through matchMedia's change events (rotation, window resize). */
+export function useMediaQuery(query: string): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mq = matchMedia(query);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
+}
+
+export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapEvents, initial: Ride | null): GuideMap | null {
   const latest = useRef(events);
   latest.current = events;
+  // only the ride at mount matters: later ones are flown to by the openRide effect
+  const first = useRef(initial);
   const [gm, setGm] = useState<GuideMap | null>(null);
   useEffect(() => {
-    const g = new GuideMap(el.current!, {
-      onHover: s => latest.current.onHover(s),
-      onOpen: s => latest.current.onOpen(s),
-      onPhotoHover: i => latest.current.onPhotoHover(i),
-      onPhotoClick: i => latest.current.onPhotoClick(i),
-    });
+    const g = new GuideMap(
+      el.current!,
+      {
+        onHover: s => latest.current.onHover(s),
+        onOpen: s => latest.current.onOpen(s),
+        onPhotoHover: i => latest.current.onPhotoHover(i),
+        onPhotoClick: i => latest.current.onPhotoClick(i),
+      },
+      first.current ?? undefined,
+    );
     setGm(g);
     return () => {
       g.destroy();

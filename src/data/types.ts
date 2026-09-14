@@ -25,26 +25,32 @@ export interface RideInput {
   transit?: string;
   /** which side of the start dot the map label sits */
   labelSide?: 'l' | 'r';
-  miles: number;
-  feet: number;
+  /** stated riding time, e.g. '1½–2 h'; leg times are calibrated to it */
   hours: string;
   tagline: string;
   notes: string[];
   story: string[];
-  /** sparse [miles, feet] keyframes the smoothed profile is generated from */
-  profileKeys: ProfilePoint[];
   photos: Photo[];
-  route: LatLng[];
   waypoints?: Waypoint[];
   /** for point-to-point rides; loops omit it */
   finish?: string;
 }
 
+/** A ride with its planned geometry (src/data/routes.generated.ts) prepared: everything shown derives from it. */
 export interface Ride extends RideInput {
-  profile: ProfilePoint[];
-  maxElev: number;
+  /** road-following planned route */
+  route: LatLng[];
   /** cumulative distance (km) at each route vertex */
   cum: number[];
+  /** [miles, feet] sampled every ~25 m and lightly smoothed */
+  profile: ProfilePoint[];
+  /** measured route length, whole miles for the headline figures */
+  miles: number;
+  /** measured route length, exact, for positions along the route */
+  lengthMi: number;
+  /** climbing from the terrain profile, ignoring reversals under 10 m */
+  feet: number;
+  maxElev: number;
   /** 1-based position in the guide, shown on start dots and thumbnails */
   num: number;
 }

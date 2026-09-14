@@ -5,12 +5,17 @@ import type { Area, LatLng, Leg, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion } from '../lib/html';
 import { areaSlug, climbs, fmt, pad2 } from '../lib/route';
+import { lazySvg } from './lazyRenderer';
 import { addLabels, terrainLayer } from './terrain';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 const MAX_BOUNDS: [LatLng, LatLng] = [[36.95, -123.3], [38.45, -121.15]];
-/** map px the floating panel covers: 16 margin + 500 panel + 8 gap */
-const PANEL_PX = 524;
+/** interval between the preview's camera moves (ms) */
+const FOLLOW_MS = 50;
+/** map px around the floating panel: 16 margin + 8 gap; the panel's own width comes from the stylesheet (--panel-w) */
+const PANEL_GAP_PX = 24;
+/** map px the floating toggle button covers along the bottom edge on a phone */
+const TOGGLE_PX = 80;
 
 export interface GuideMapEvents {
   onHover(slug: string | null): void;
@@ -52,13 +57,18 @@ export class GuideMap {
   private previewing = false;
   /** whether the floating panel is showing over the map's left edge; views are fitted around it */
   private covered = true;
+  /** phone layout: the panel is a document under the map, which fills the screen when opened */
+  private mobile = false;
   private loaded = false;
   /** the latest view change requested before the container had a size */
   private pendingView: (() => void) | null = null;
 
-  constructor(el: HTMLElement, events: GuideMapEvents) {
+  /** `initial` is the ride the page opened on, so the map starts on it rather than flying there from the home view */
+  constructor(el: HTMLElement, events: GuideMapEvents, initial?: Ride) {
     const map = (this.map = L.map(el, {
       zoomControl: false,
+      // routes redraw only when the view leaves what was drawn, not on every one of the preview's pans
+      renderer: lazySvg({ padding: 0.5 }),
       zoomSnap: 0.25,
       zoomDelta: 0.5,
       wheelPxPerZoomLevel: 140,
@@ -72,7 +82,7 @@ export class GuideMap {
     map.once('load', () => (this.loaded = true));
     map.attributionControl.setPrefix(false);
     L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(map);
-    terrainLayer().addTo(map);
+    terrainLayer(map).addTo(map);
     addLabels(map, LABELS);
     map.on('zoomend', () => this.paintNames());
 
@@ -118,7 +128,7 @@ export class GuideMap {
       this.flushView();
     });
     this.observer.observe(el);
-    this.view(() => map.fitBounds(HOME, this.pad('home')));
+    this.view(() => (initial ? map.fitBounds(bounds([initial.route]), this.pad('ride')) : map.fitBounds(HOME, this.pad('home'))));
   }
 
   destroy() {
@@ -151,6 +161,17 @@ export class GuideMap {
     if (refit) this.refit(0.7);
   }
 
+  setMobile(mobile: boolean) {
+    this.mobile = mobile;
+    this.map.invalidateSize(false);
+  }
+
+  /** the container just became visible (the phone map was mounted hidden): re-measure and settle on the current view */
+  refresh() {
+    this.map.invalidateSize(false);
+    if (!this.previewing) this.refit(0.7);
+  }
+
   openRide(ride: Ride) {
     if (ride === this.ride) return;
     this.resetRide();
@@ -178,7 +199,7 @@ export class GuideMap {
       });
       m.on('add', () => m.getElement()?.setAttribute('aria-label', `Photo ${i + 1}: ${ph.cap}`));
       m.addTo(this.pinGroup);
-      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${(ph.f * ride.miles).toFixed(1)} mi in</small>`, {
+      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${(ph.f * ride.lengthMi).toFixed(1)} mi in</small>`, {
         className: 'ride-tip',
         direction: 'top',
         offset: [0, -30],
@@ -230,17 +251,25 @@ export class GuideMap {
     if (!r) return;
     this.clearTimers(this.flyTimers);
     this.flying = this.previewing = true;
+    this.lastFollow = 0;
     this.paint();
     this.progress.setLatLngs([r.route[0]]);
     this.progress.bringToFront();
     this.map.flyTo(r.route[0], Math.min(13.5, this.map.getZoom() + 1.75), { duration: 1.4, animate: !reducedMotion() });
   }
 
+  /** the preview's last camera move, so the map is re-centred a few times a second rather than every frame */
+  private lastFollow = 0;
+
   flyoverFrame(f: number) {
     const r = this.ride;
     if (!r || !this.flying) return;
+    // every moveend re-clips all the vector layers, so glide between positions at ~20 Hz instead of jumping at 60
+    const now = performance.now();
+    if (now - this.lastFollow < FOLLOW_MS && f < 1) return;
+    this.lastFollow = now;
     this.progress.setLatLngs(sliceTo(r.route, r.cum, f));
-    this.map.panTo(pointAt(r.route, r.cum, f), { animate: false });
+    this.map.panTo(pointAt(r.route, r.cum, f), { animate: true, duration: FOLLOW_MS / 1000, easeLinearity: 1, noMoveStart: true });
   }
 
   endFlyover(finished: boolean) {
@@ -314,8 +343,18 @@ export class GuideMap {
   }
 
   private pad(kind: 'home' | 'ride' | 'area'): L.FitBoundsOptions {
+    if (this.mobile) {
+      // nothing covers the left edge; the toggle button sits along the bottom
+      if (kind === 'home') return { paddingTopLeft: [16, 16], paddingBottomRight: [16, TOGGLE_PX] };
+      if (kind === 'ride') return { paddingTopLeft: [24, 90], paddingBottomRight: [24, TOGGLE_PX + 16] };
+      return { paddingTopLeft: [24, 40], paddingBottomRight: [24, TOGGLE_PX] };
+    }
+    // the floating panel's actual width (0 in a layout where it doesn't cover the map)
+    const side = document.getElementById('side');
+    const panel = document.documentElement.classList.contains('float') && side ? side.offsetWidth : 0;
+    const px = panel ? panel + PANEL_GAP_PX : 0;
     // on a narrow window the panel covers most of the map; padding for it would leave no room to fit anything
-    const f = this.covered && !this.previewing && PANEL_PX < this.map.getSize().x * 0.6 ? PANEL_PX : 0;
+    const f = this.covered && !this.previewing && px < this.map.getSize().x * 0.6 ? px : 0;
     if (kind === 'home') return { paddingTopLeft: [20 + f, 20], paddingBottomRight: [20, 20] };
     if (kind === 'ride') return { paddingTopLeft: [70 + f, 90], paddingBottomRight: [70, 110] };
     return { paddingTopLeft: [70 + f, 70], paddingBottomRight: [70, 70] };

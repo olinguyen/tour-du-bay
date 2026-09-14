@@ -22,7 +22,8 @@ const plural = (n: number) => `${n} ride${n === 1 ? '' : 's'}`;
 /** rides in panel order: grouped by region, sorted within. Arrows, prev/next and the pager all follow this. */
 export function sequence(area: Area | null, sort: Sort): Ride[] {
   const areas = area ? [area] : AREAS;
-  return areas.flatMap(a => ridesIn(a).sort((x, y) => (x[sort.key] - y[sort.key]) * sort.dir));
+  const by = (r: Ride) => (sort.key === 'miles' ? r.lengthMi : r.feet);
+  return areas.flatMap(a => ridesIn(a).sort((x, y) => (by(x) - by(y)) * sort.dir));
 }
 
 interface Props {
@@ -31,30 +32,44 @@ interface Props {
   sort: Sort;
   hot: string | null;
   side: RefObject<HTMLElement | null>;
+  /** phone layout: the window scrolls the list, not #side */
+  mobile: boolean;
   onArea(a: Area | null): void;
   onSort(s: Sort): void;
   onHot(slug: string | null): void;
   onOpen(slug: string): void;
 }
 
-export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, onOpen }: Props) {
+/** the element that scrolls the list, with positions measured in its scroll space */
+function scroller(side: HTMLElement, mobile: boolean) {
+  const el = mobile ? document.scrollingElement! : side;
+  const origin = mobile ? 0 : side.getBoundingClientRect().top;
+  return {
+    el,
+    height: mobile ? window.innerHeight : side.clientHeight,
+    top: (n: HTMLElement) => n.getBoundingClientRect().top - origin + el.scrollTop,
+  };
+}
+
+export function ListView({ rides, area, sort, hot, side, mobile, onArea, onSort, onHot, onOpen }: Props) {
   const chips = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
   const chooseArea = (a: Area | null) => {
     onArea(a);
-    const el = side.current;
-    if (el && chips.current) el.scrollTo({ top: Math.min(el.scrollTop, chips.current.offsetTop - 24), behavior: scrollBehavior() });
+    if (!side.current || !chips.current) return;
+    const s = scroller(side.current, mobile);
+    s.el.scrollTo({ top: Math.min(s.el.scrollTop, s.top(chips.current) - 24), behavior: scrollBehavior() });
   };
 
   // keep the hot row in view when it's highlighted from the map or the keyboard
   useEffect(() => {
-    const el = side.current;
     const row = hot && list.current?.querySelector<HTMLElement>(`.row[data-slug="${hot}"]`);
-    if (!el || !row) return;
-    const top = row.offsetTop - el.clientHeight / 2 + row.offsetHeight / 2;
-    if (Math.abs(el.scrollTop - top) > el.clientHeight * 0.4) el.scrollTo({ top, behavior: scrollBehavior() });
-  }, [hot, side]);
+    if (!side.current || !row) return;
+    const s = scroller(side.current, mobile);
+    const top = s.top(row) - s.height / 2 + row.offsetHeight / 2;
+    if (Math.abs(s.el.scrollTop - top) > s.height * 0.4) s.el.scrollTo({ top, behavior: scrollBehavior() });
+  }, [hot, side, mobile]);
 
   return (
     <div id="view-list" className="view enter">
@@ -75,7 +90,7 @@ export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, 
         ))}
       </div>
       <div className="hdr">
-        <span id="count-list">{plural(rides.length)}</span>
+        <span id="count-list" aria-live="polite">{plural(rides.length)}</span>
         <div className="r" id="sort">
           {SORT_KEYS.map(o => {
             const on = o.k === sort.key;
@@ -106,11 +121,13 @@ export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, 
           return (
             <section className="grp" data-area={areaSlug(a)} key={a}>
               {!area && (
-                <button className="grp-h" title={`Show only ${a}`} onClick={() => chooseArea(a)}>
-                  <i />
-                  <span>{a}</span>
-                  <small>{plural(grp.length)}</small>
-                </button>
+                <h2 className="grp-hd">
+                  <button className="grp-h" title={`Show only ${a}`} onClick={() => chooseArea(a)}>
+                    <i />
+                    <span>{a}</span>
+                    <small>{plural(grp.length)}</small>
+                  </button>
+                </h2>
               )}
               {grp.map(r => (
                 <Row key={r.slug} ride={r} hot={r.slug === hot} onHot={onHot} onOpen={onOpen} />
@@ -132,38 +149,47 @@ interface RowProps {
 
 const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
   const shape = useMemo(() => outline(r.route), [r]);
+  const hours = r.hours.replace(/\s*h$/, '');
+  const desc = `row-desc-${r.slug}`;
+  // the description precedes the button so the last row stays :last-child; the visible stats are hidden from AT in its favour
   return (
-    <button
-      className={'row' + (hot ? ' hot' : '')}
-      data-slug={r.slug}
-      data-area={areaSlug(r.area)}
-      onMouseEnter={() => onHot(r.slug)}
-      onMouseLeave={() => onHot(null)}
-      onFocus={e => e.currentTarget.matches(':focus-visible') && onHot(r.slug)}
-      onBlur={() => onHot(null)}
-      onClick={() => onOpen(r.slug)}
-    >
-      <div className="thumb" aria-hidden="true">
-        <span className="idx">{pad2(r.num)}</span>
-        <Sparkline ride={r} />
-        <svg className="shape" viewBox="0 0 96 68">
-          <path d={shape.d} />
-          <circle cx={shape.cx} cy={shape.cy} />
-        </svg>
-      </div>
-      <div>
-        <span className="name">{r.name}</span>
-        <div className="stats">
-          <span>{r.miles} mi</span>
-          <i>·</i>
-          <span>{fmt(r.feet)} ft</span>
-          <i>·</i>
-          <span>{r.hours.replace(/\s*h$/, '')} h</span>
-        </div>
-        <div className="row-sub">
-          <span className="tag">{r.area}</span> · from {place(r.start)}
-        </div>
-      </div>
-    </button>
+    <>
+      <span className="sr-only" id={desc}>
+        {r.area} · {r.miles} miles · {fmt(r.feet)} feet of climbing · {hours} hours · starts at {place(r.start)}
+      </span>
+      <button
+        className={'row' + (hot ? ' hot' : '')}
+        data-slug={r.slug}
+        aria-describedby={desc}
+        data-area={areaSlug(r.area)}
+        onMouseEnter={() => onHot(r.slug)}
+        onMouseLeave={() => onHot(null)}
+        onFocus={e => e.currentTarget.matches(':focus-visible') && onHot(r.slug)}
+        onBlur={() => onHot(null)}
+        onClick={() => onOpen(r.slug)}
+      >
+        <span className="thumb" aria-hidden="true">
+          <span className="idx">{pad2(r.num)}</span>
+          <Sparkline ride={r} />
+          <svg className="shape" viewBox="0 0 96 68">
+            <path d={shape.d} />
+            <circle cx={shape.cx} cy={shape.cy} />
+          </svg>
+        </span>
+        <span>
+          <span className="name">{r.name}</span>
+          <span className="stats" aria-hidden="true">
+            <span>{r.miles} mi</span>
+            <i>·</i>
+            <span>{fmt(r.feet)} ft</span>
+            <i>·</i>
+            <span>{hours} h</span>
+          </span>
+          <span className="row-sub" aria-hidden="true">
+            <span className="tag">{r.area}</span> · from {place(r.start)}
+          </span>
+        </span>
+      </button>
+    </>
   );
 });
