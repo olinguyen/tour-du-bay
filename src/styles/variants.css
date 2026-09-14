@@ -70,3 +70,35 @@ html.float.phide .ptab .ptab-show{display:block}
 html.float.phide .legend,html.float.phide .mapchip{left:52px}
 html.float.phide .leaflet-bottom.leaflet-left{left:28px}
 html.float .legend,html.float .mapchip,html.float .leaflet-bottom.leaflet-left{transition:left .5s cubic-bezier(.2,.7,.2,1)}
+
+/* ---- narrower windows (701–1000px): the panel takes a share of the width. --panel-w is what the map reads
+   (GuideMap.pad) to fit views beside it; registered so it computes to px. ---- */
+@property --panel-w{syntax:"<length>";inherits:true;initial-value:0px}
+html.float{--panel-w:500px}
+@media (max-width:1000px){
+  html.float{--panel-w:46vw}
+  html.float #side{width:var(--panel-w)}
+  html.float .ptab{left:calc(var(--panel-w) + 16px)}
+  html.float .legend,html.float .mapchip{left:calc(var(--panel-w) + 48px)}
+  html.float .leaflet-bottom.leaflet-left{left:calc(var(--panel-w) + 24px)}
+  /* the narrower panel: tighter gutters and a smaller thumbnail so a row's stats stay on one line */
+  html.float .view{padding:36px 28px 56px}
+  html.float .hdr .r{gap:14px}
+  html.float #count-list{white-space:nowrap}
+  html.float .row{grid-template-columns:72px minmax(0,1fr);gap:0 16px}
+  html.float .row .thumb{width:72px;height:52px}
+  html.float .row .thumb .spark{height:34px}
+  html.float .row .name{font-size:23px}
+  html.float .row .stats{gap:10px;font-size:12.5px}
+  html.float #r-name{font-size:46px}
+  html.float .facts b{font-size:38px}
+}
+/* ---- phones (≤700px): the panel is the document; no floating, no hide tab (the toggle in app.css swaps layers) ---- */
+@media (max-width:700px){
+  html.float{--panel-w:0px}
+  html.float #side,html.float.phide #side{position:static;width:auto;max-height:none;border-radius:0;box-shadow:none;transform:none;opacity:1;pointer-events:auto;transition:none}
+  html.float .view{padding:28px 22px 120px}
+  html.float .ptab,html.float.phide .ptab{display:none}
+  html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
+  html.float .leaflet-bottom.leaflet-left,html.float.phide .leaflet-bottom.leaflet-left{left:0}
+}

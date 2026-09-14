@@ -187,3 +187,27 @@ img.ph{display:block;width:100%;object-fit:cover;padding:0}
 }
 #r-name:focus{outline:none}
 .mapchip .chip-stop{border-right:0;border-left:1px solid var(--rule);padding:2px 0 2px 12px}
+
+/* ---- phones (≤700px): the guide stacks as one scrolling document and the map becomes a full-screen layer,
+   shown by body.map-open and swapped in and out by the floating .map-toggle button. ---- */
+@media (max-width:700px){
+  body,html.float body{display:block;height:auto;overflow:auto}
+  body.map-open{overflow:hidden}
+  #side{position:static;width:auto;min-height:100vh;min-height:100dvh;overflow:visible;border-right:0}
+  .view{padding:28px 22px 120px}
+  .view h1{font-size:44px}
+  .row{box-sizing:border-box} /* the soft variant widens rows past the padding; #side no longer clips it */
+  #r-name{font-size:40px}
+  .facts b{font-size:36px}
+  #mapwrap,html.float #mapwrap{position:fixed;inset:0;z-index:1200;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .2s,visibility 0s .2s}
+  body.map-open #mapwrap{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .2s}
+  .ptab,.compass,.legend{display:none}
+  /* the chip is the way back to the list from the map: give its buttons a full tap target */
+  .mapchip{top:16px;left:16px;right:16px;max-width:none;white-space:normal;flex-wrap:wrap;align-items:center;gap:0 12px;padding:4px 14px 4px 4px}
+  .mapchip button{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
+  .mapchip .chip-stop{padding:0 0 0 12px}
+  .leaflet-bottom{bottom:calc(max(22px,env(safe-area-inset-bottom)) + 52px)}
+  .leaflet-container .leaflet-control-attribution{font-size:8px;max-width:calc(100vw - 120px)}
+  .map-toggle{all:unset;box-sizing:border-box;position:fixed;z-index:1300;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 24px;border-radius:999px;background:var(--ink);color:var(--page);font:500 12px var(--sans);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;cursor:pointer;box-shadow:0 12px 30px -12px rgba(42,36,29,.6);user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  .map-toggle:focus-visible{outline:1px solid var(--page);outline-offset:-5px}
+}
