@@ -184,7 +184,7 @@ function closeCoast(pieces) {
   for (const start of ok) {
     if (used.has(start)) continue;
     const ring = [];
-    let cur = start;
+    let cur = start, complete = false;
     for (let guard = 0; guard <= ok.length; guard++) {
       used.add(cur);
       ring.push(...cur.p);
@@ -195,12 +195,16 @@ function closeCoast(pieces) {
         if (d < best) (best = d), (next = o);
       }
       ring.push(...cornersBetween(cur.exit, next.entry));
-      if (next === start) break;
-      if (used.has(next)) {
-        console.warn('  coastline walk hit a used piece; ring abandoned');
+      if (next === start) {
+        complete = true;
         break;
       }
+      if (used.has(next)) break;
       cur = next;
+    }
+    if (!complete) {
+      console.warn('  coastline walk could not close a ring (inconsistent way directions?); dropped');
+      continue;
     }
     ring.push(ring[0]);
     rings.push(ring);
@@ -268,12 +272,19 @@ console.log(`  ${coastWays.length} coastline ways, ${waterWays.length} water way
 const { rings: coastRings, lines: coastLines } = chain(coastWays);
 const pieces = [];
 const seaOuters = [], islands = [];
-for (const r of [...coastRings, ...coastLines]) {
+for (let r of [...coastRings, ...coastLines]) {
   const closed = same(r[0], r[r.length - 1]);
   if (closed && r.every(inside)) {
     // CCW = land on the left going round = an island (hole in the sea); CW = an enclosed water body
     (area(r) > 0 ? islands : seaOuters).push(r);
-  } else pieces.push(...clipLine(r));
+    continue;
+  }
+  if (closed) {
+    // a ring straddling the bbox must be clipped from an outside vertex, or its first and last pieces stop mid-bbox
+    const k = r.findIndex(p => !inside(p));
+    r = [...r.slice(k), ...r.slice(1, k + 1)];
+  }
+  pieces.push(...clipLine(r));
 }
 seaOuters.push(...closeCoast(pieces));
 console.log(`  sea: ${seaOuters.length} outer ring(s), ${islands.length} island(s)`);
