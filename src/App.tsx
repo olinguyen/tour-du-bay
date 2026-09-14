@@ -63,7 +63,7 @@ export default function App() {
         window.scrollTo({ top: f.getBoundingClientRect().top + window.scrollY - 24, behavior: scrollBehavior() });
       } else side.current!.scrollTo({ top: f.offsetTop - 24, behavior: scrollBehavior() });
     },
-  });
+  }, ride);
   const { flying, toggle: toggleFlyover } = useFlyover(gm, ride, scrub);
   stopFly.current = () => {
     if (flying) toggleFlyover();

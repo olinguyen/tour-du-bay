@@ -5,14 +5,14 @@
 //   waypoints:[{f, name}]  named points along the route, f = fraction of total distance. When absent, waypoints
 //                          are derived from the profile (high point, foot/top of each steep climb); photos add extras.
 //   finish:'Town, place'   for point-to-point rides. Omit for loops (finish = start).
-//   miles / hours          stated totals: miles is only a sanity check on the plan, leg times are calibrated to hours.
+//   hours                  stated riding time; leg times are calibrated to it. Distance and climbing are measured.
 import type { RideInput, MapLabel } from './types';
 
 export const AREAS = ["Marin","East Bay","Peninsula"] as const;
 
 export const RIDE_INPUTS: RideInput[] = [
   { slug: "paradise-loop", name: "Paradise Loop", area: "Marin", start: "Mill Valley, Depot Plaza",
-    miles: 22, hours: "1½–2 h",
+    hours: "1½–2 h",
     tagline: "The one I ride when I don’t want to think.",
     notes: [
       "Ride it clockwise so the bay is on your right the whole way round Tiburon.",
@@ -35,7 +35,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "tam-alpine-dam", name: "Mt Tam via Alpine Dam", area: "Marin", start: "Fairfax, the Parkade",
-    miles: 41, hours: "4–5 h",
+    hours: "4–5 h",
     tagline: "The big Marin day. Lake, ridge, summit, ocean air.",
     notes: [
       "Bolinas–Fairfax Road has rough pavement after the lake. Wider tires help.",
@@ -59,7 +59,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "hawk-hill", name: "Hawk Hill", area: "Marin", start: "Crissy Field, East Beach lot",
-    miles: 16, hours: "1½ h",
+    hours: "1½ h",
     tagline: "Short, steep, and the best view of the city there is.",
     notes: [
       "The bridge’s west sidewalk is bikes-only on weekends; the east side otherwise, shared with walkers.",
@@ -80,7 +80,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "three-bears", name: "Three Bears", area: "East Bay", start: "Orinda BART", transit: "BART",
-    miles: 27, hours: "2–2½ h",
+    hours: "2–2½ h",
     tagline: "Rolling ranch roads, cows, and three honest climbs.",
     notes: [
       "Counter-clockwise: Pig Farm Hill first, then Mama, Papa and Baby Bear on the way home.",
@@ -101,7 +101,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "diablo-south-gate", name: "Mt Diablo, South Gate", area: "East Bay", start: "Danville, Railroad Ave",
-    miles: 38, hours: "3½–4 h",
+    hours: "3½–4 h",
     tagline: "Eleven miles up, then a wall, then everything.",
     notes: [
       "The grade is steady at 5–6% until the last 150 metres, which are 17%. Save one gear.",
@@ -122,7 +122,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "grizzly-peak", name: "Grizzly Peak & Skyline", area: "East Bay", start: "Downtown Berkeley BART", transit: "BART", labelSide: "l",
-    miles: 21, hours: "2 h",
+    hours: "2 h",
     tagline: "The after-work ride. Bay lights on the way down.",
     notes: [
       "Spruce Street is the gentlest way up; Marin Avenue is the hardest and I don’t recommend it.",
@@ -141,7 +141,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "tunitas-creek", name: "Tunitas Creek Loop", area: "Peninsula", start: "Woodside, Roberts Market",
-    miles: 47, hours: "4–5 h",
+    hours: "4–5 h",
     tagline: "Redwoods, coast, and the best climb on the Peninsula.",
     notes: [
       "Kings Mountain Road is the way over the ridge; shaded, steady, quiet.",
@@ -162,7 +162,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "old-la-honda", name: "Old La Honda & Page Mill", area: "Peninsula", start: "Portola Valley Town Center",
-    miles: 34, hours: "3 h",
+    hours: "3 h",
     tagline: "The climb everyone times. I don’t any more.",
     notes: [
       "Old La Honda is 3.3 miles, about 1,300 feet, and nearly car-free. Ride it at your own pace.",

@@ -535,10 +535,8 @@ test('plans must reference known segments, starts and roles, and every itinerary
   await assert.rejects(f.run(), /test-ride: itinerary has no ride in src\/data\/rides.ts/);
   await f.saveCatalog(['test-ride', 'test-ride']);
   await assert.rejects(f.run(), /test-ride: duplicate ride slug/);
-  const warnings = [];
   await f.saveCatalog(['test-ride', 'unplanned-ride']);
-  await f.run({ log: { log() {}, warn: message => warnings.push(message) } });
-  assert.deepEqual(warnings, ['unplanned-ride: ride has no planned route; guide.ts needs legacy data for it']);
+  await assert.rejects(f.run(), /unplanned-ride: ride has no planned route/);
 });
 
 test('renaming an itinerary in both plan and published file still requires a matching catalog ride', async t => {

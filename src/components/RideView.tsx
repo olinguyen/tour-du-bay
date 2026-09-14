@@ -61,7 +61,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         data-i={i}
         className={hotPhoto === i ? 'hot' : undefined}
         tabIndex={0}
-        aria-label={`Photo ${i + 1}: ${ph.cap}, ${(ph.f * r.miles).toFixed(1)} miles in`}
+        aria-label={`Photo ${i + 1}: ${ph.cap}, ${(ph.f * r.lengthMi).toFixed(1)} miles in`}
         onMouseEnter={enter}
         onMouseLeave={leave}
         onFocus={enter}
@@ -71,7 +71,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           <img className="ph" src={ph.src} alt={ph.cap} loading="lazy" />
         ) : (
           <div className="ph" aria-hidden="true">
-            <b>photo · {(ph.f * r.miles).toFixed(1)} mi in</b>
+            <b>photo · {(ph.f * r.lengthMi).toFixed(1)} mi in</b>
           </div>
         )}
         <figcaption>
@@ -178,7 +178,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
             <b />
             <span className="lg">{card.loop ? 'Round trip' : 'Point to point'}</span>
             <span className="st">
-              <span>{r.miles}<i> mi</i></span>
+              <span>{r.lengthMi.toFixed(1)}<i> mi</i></span>
               <span>+{fmt(r.feet)}<i> ft</i></span>
               <span>{hm(card.hours)}</span>
             </span>

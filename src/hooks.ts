@@ -47,17 +47,23 @@ export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
 }
 
-export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapEvents): GuideMap | null {
+export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapEvents, initial: Ride | null): GuideMap | null {
   const latest = useRef(events);
   latest.current = events;
+  // only the ride at mount matters: later ones are flown to by the openRide effect
+  const first = useRef(initial);
   const [gm, setGm] = useState<GuideMap | null>(null);
   useEffect(() => {
-    const g = new GuideMap(el.current!, {
-      onHover: s => latest.current.onHover(s),
-      onOpen: s => latest.current.onOpen(s),
-      onPhotoHover: i => latest.current.onPhotoHover(i),
-      onPhotoClick: i => latest.current.onPhotoClick(i),
-    });
+    const g = new GuideMap(
+      el.current!,
+      {
+        onHover: s => latest.current.onHover(s),
+        onOpen: s => latest.current.onOpen(s),
+        onPhotoHover: i => latest.current.onPhotoHover(i),
+        onPhotoClick: i => latest.current.onPhotoClick(i),
+      },
+      first.current ?? undefined,
+    );
     setGm(g);
     return () => {
       g.destroy();

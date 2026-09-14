@@ -22,7 +22,7 @@ const STEPS = 1000, JUMP = 50;
 export function scrubParts(ride: Ride, f: number) {
   const g = gradeAt(ride.profile, f);
   return {
-    mi: (f * ride.miles).toFixed(1),
+    mi: (f * ride.lengthMi).toFixed(1),
     ft: fmt(Math.round(elevAt(ride.profile, f))),
     grade: `${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)}%`,
   };

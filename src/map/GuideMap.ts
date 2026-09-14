@@ -9,6 +9,8 @@ import { addLabels, terrainLayer } from './terrain';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 const MAX_BOUNDS: [LatLng, LatLng] = [[36.95, -123.3], [38.45, -121.15]];
+/** interval between the preview's camera moves (ms) */
+const FOLLOW_MS = 50;
 /** map px around the floating panel: 16 margin + 8 gap; the panel's own width comes from the stylesheet (--panel-w) */
 const PANEL_GAP_PX = 24;
 /** map px the floating toggle button covers along the bottom edge on a phone */
@@ -60,7 +62,8 @@ export class GuideMap {
   /** the latest view change requested before the container had a size */
   private pendingView: (() => void) | null = null;
 
-  constructor(el: HTMLElement, events: GuideMapEvents) {
+  /** `initial` is the ride the page opened on, so the map starts on it rather than flying there from the home view */
+  constructor(el: HTMLElement, events: GuideMapEvents, initial?: Ride) {
     const map = (this.map = L.map(el, {
       zoomControl: false,
       zoomSnap: 0.25,
@@ -122,7 +125,7 @@ export class GuideMap {
       this.flushView();
     });
     this.observer.observe(el);
-    this.view(() => map.fitBounds(HOME, this.pad('home')));
+    this.view(() => (initial ? map.fitBounds(bounds([initial.route]), this.pad('ride')) : map.fitBounds(HOME, this.pad('home'))));
   }
 
   destroy() {
@@ -193,7 +196,7 @@ export class GuideMap {
       });
       m.on('add', () => m.getElement()?.setAttribute('aria-label', `Photo ${i + 1}: ${ph.cap}`));
       m.addTo(this.pinGroup);
-      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${(ph.f * ride.miles).toFixed(1)} mi in</small>`, {
+      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${(ph.f * ride.lengthMi).toFixed(1)} mi in</small>`, {
         className: 'ride-tip',
         direction: 'top',
         offset: [0, -30],
@@ -245,17 +248,25 @@ export class GuideMap {
     if (!r) return;
     this.clearTimers(this.flyTimers);
     this.flying = this.previewing = true;
+    this.lastFollow = 0;
     this.paint();
     this.progress.setLatLngs([r.route[0]]);
     this.progress.bringToFront();
     this.map.flyTo(r.route[0], Math.min(13.5, this.map.getZoom() + 1.75), { duration: 1.4, animate: !reducedMotion() });
   }
 
+  /** the preview's last camera move, so the map is re-centred a few times a second rather than every frame */
+  private lastFollow = 0;
+
   flyoverFrame(f: number) {
     const r = this.ride;
     if (!r || !this.flying) return;
+    // every moveend re-clips all the vector layers, so glide between positions at ~20 Hz instead of jumping at 60
+    const now = performance.now();
+    if (now - this.lastFollow < FOLLOW_MS && f < 1) return;
+    this.lastFollow = now;
     this.progress.setLatLngs(sliceTo(r.route, r.cum, f));
-    this.map.panTo(pointAt(r.route, r.cum, f), { animate: false });
+    this.map.panTo(pointAt(r.route, r.cum, f), { animate: true, duration: FOLLOW_MS / 1000, easeLinearity: 1, noMoveStart: true });
   }
 
   endFlyover(finished: boolean) {

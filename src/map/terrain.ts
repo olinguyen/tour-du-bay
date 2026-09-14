@@ -29,17 +29,16 @@ const AMBIENT = 0.5, FLAT_LUM = 0.95;
 const EQ_M_PER_PX = 40075016.686 / SIZE;
 const CACHE_MAX = 100;
 
-function load(url: string): Promise<HTMLImageElement> {
+function load(url: string, im: HTMLImageElement): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const im = new Image();
     im.crossOrigin = 'anonymous';
     im.onload = () => resolve(im);
-    im.onerror = reject;
+    im.onerror = () => reject(new Error(`tile failed: ${url}`));
     im.src = url;
   });
 }
 
-const tileKey = (c: L.Coords) => `${c.z}/${c.x}/${c.y}`;
+const tileKey = (c: L.Coords) => c.toString(); // Leaflet's own 'x:y:z'
 const tileUrl = (c: L.Coords) => DEM.replace('{z}', String(c.z)).replace('{x}', String(c.x)).replace('{y}', String(c.y));
 
 /** metres per pixel for a tile: the web-mercator scale at the tile's centre latitude */
@@ -114,7 +113,6 @@ function paint(ctx: CanvasRenderingContext2D, dem: HTMLImageElement, coords: L.C
     o[p + 2] = GROUND[2] * (s + ((1 - s) * TINT[2]) / 255);
     o[p + 3] = seaClear && sea[i] ? 0 : 255;
   }
-  ctx.putImageData(out, 0, 0);
   return out;
 }
 
@@ -125,6 +123,49 @@ function remember(key: string, img: ImageData) {
   cache.set(key, img);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
 }
+/**
+ * Fetches under way, so a tile pruned and re-created mid-flight (a zoom, a fly) joins the first request instead of
+ * repeating it; `waiters` counts the tiles wanting it, and the request is abandoned once no tile does, freeing one of
+ * the browser's few connections to the tile host for tiles that are on screen.
+ */
+const pending = new Map<string, { job: Promise<ImageData>; img: HTMLImageElement; waiters: number }>();
+/** one canvas decodes every tile; the tiles themselves only receive pixels */
+let scratch: CanvasRenderingContext2D | null = null;
+
+function shadeTile(coords: L.Coords): Promise<ImageData> {
+  const key = tileKey(coords), hit = cache.get(key);
+  if (hit) {
+    remember(key, hit);
+    return Promise.resolve(hit);
+  }
+  let p = pending.get(key);
+  if (!p) {
+    const img = new Image();
+    const job = load(tileUrl(coords), img)
+      .then(dem => {
+        if (!scratch) {
+          const c = document.createElement('canvas');
+          c.width = c.height = SIZE;
+          scratch = c.getContext('2d', { willReadFrequently: true })!;
+        }
+        const out = paint(scratch, dem, coords);
+        remember(key, out);
+        return out;
+      })
+      .finally(() => pending.delete(key));
+    pending.set(key, (p = { job, img, waiters: 0 }));
+  }
+  p.waiters++;
+  return p.job;
+}
+
+/** a tile Leaflet removed no longer needs its fetch; the last waiter leaving cancels it */
+function release(coords: L.Coords) {
+  const p = pending.get(coords.toString());
+  if (!p || --p.waiters > 0) return;
+  pending.delete(coords.toString());
+  p.img.src = ''; // cancels the request; onerror rejects the job, which no tile is waiting on
+}
 
 const TerrainLayer = L.GridLayer.extend({
   options: {
@@ -133,29 +174,26 @@ const TerrainLayer = L.GridLayer.extend({
     maxZoom: 15,
     minZoom: 7,
     updateWhenZooming: false,
-    keepBuffer: 2,
+    // one tile beyond the viewport, not Leaflet's two: every tile costs a slow fetch from the DEM host
+    keepBuffer: 1,
     attribution: ATTRIBUTION,
+  },
+  onAdd(map: L.Map) {
+    this.on('tileunload', (e: L.TileEvent) => release(e.coords));
+    L.GridLayer.prototype.onAdd.call(this, map);
   },
   createTile(coords: L.Coords, done: L.DoneCallback) {
     const tile = document.createElement('canvas');
     tile.width = tile.height = SIZE;
     tile.className = 'terrain-tile';
-    const ctx = tile.getContext('2d', { willReadFrequently: true })!;
-    const key = tileKey(coords), hit = cache.get(key);
-    // Leaflet expects done() after createTile returns, and a tile pruned meanwhile (and maybe re-created) must not
-    // report in for its replacement: a detached canvas is stale
-    const ready = () => tile.isConnected && done(undefined, tile);
-    if (hit) {
-      remember(key, hit);
-      ctx.putImageData(hit, 0, 0);
-      queueMicrotask(ready);
-      return tile;
-    }
-    load(tileUrl(coords))
-      .then(dem => {
+    const ctx = tile.getContext('2d')!;
+    // the promise settles after createTile has returned (Leaflet expects done() then), and a tile pruned meanwhile
+    // (perhaps re-created) must not report in for its replacement: a detached canvas is stale
+    shadeTile(coords)
+      .then(img => {
         if (!tile.isConnected) return;
-        remember(key, paint(ctx, dem, coords));
-        ready();
+        ctx.putImageData(img, 0, 0);
+        done(undefined, tile);
       })
       .catch(err => {
         if (!tile.isConnected) return;

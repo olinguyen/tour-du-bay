@@ -5,6 +5,7 @@
 //   segment-id …  request just those segments again (even if unchanged), reuse the rest, then publish
 //   --check       validate the published file against the plan offline; never writes or fetches
 import * as fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -406,7 +407,7 @@ function validateCollection(routes, plans, inputs, vias, catalog, log) {
     if (distanceMeters(latLng(plans.starts[itinerary.startId].coordinate), route.points[0]) > START_M) throw new Error(`${slug}: route starts too far from its named start`);
   }
   for (const slug of catalog) {
-    if (!Object.hasOwn(routes, slug)) log.warn(`${slug}: ride has no planned route; guide.ts needs legacy data for it`);
+    if (!Object.hasOwn(routes, slug)) throw new Error(`${slug}: ride has no planned route; add an itinerary to scripts/route-plans.json`);
   }
 }
 
@@ -417,4 +418,4 @@ function distanceMeters(a, b) {
   return Math.hypot((b[1] - a[1]) * Math.cos(latitude), b[0] - a[0]) * 111320;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await prepareRoutes();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) await prepareRoutes();

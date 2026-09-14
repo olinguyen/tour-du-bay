@@ -1,6 +1,9 @@
 # Node / Vite
 node_modules/
 
+# half-written outputs of scripts/ (atomic writes go through a temp file next to the target)
+*.tmp
+
 # Claude Code agent worktrees
 /.claude/worktrees/
 *.tsbuildinfo
