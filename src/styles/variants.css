@@ -1,0 +1,72 @@
+/* Floating, soft-cornered panel ("variant B" in the design exports) and the panel hide tab. */
+
+/* ---- floating panel (A, B) ---- */
+html.float body{display:block;position:relative}
+html.float #mapwrap{position:absolute;inset:0}
+html.float #side{position:absolute;top:16px;left:16px;max-height:calc(100% - 32px);width:500px;z-index:1100;border-right:0}
+html.float .view{padding:44px 40px 56px}
+html.float .legend,html.float .mapchip{left:548px}
+html.float .leaflet-bottom.leaflet-left{left:524px}
+
+/* ---- B · soft: radius, no rules, spacing ---- */
+html[data-v="B"] #side{background:var(--panel);border:0;border-radius:22px;box-shadow:0 2px 6px rgba(42,36,29,.06),0 32px 70px -30px rgba(42,36,29,.5)}
+html[data-v="B"] .kicker{border-bottom:0;padding-bottom:0;margin-bottom:36px}
+html[data-v="B"] .ch{padding:9px 13px 8px 14px}
+html[data-v="B"] .chips{margin-top:40px;padding-bottom:10px}
+html[data-v="B"] .hdr{border-bottom:0;padding:12px 12px 6px}
+html[data-v="B"] .grp-h{padding:24px 12px 8px}
+html[data-v="B"] .grp+.grp{margin-top:20px}
+html[data-v="B"] .chips{flex-wrap:wrap;align-items:center}
+html[data-v="B"] .row{border-bottom:0;padding:14px 12px;margin:0 -12px;width:calc(100% + 24px);border-radius:16px;transition:background .2s}
+html[data-v="B"] .row:hover,html[data-v="B"] .row.hot{background:rgba(42,36,29,.055)}
+html[data-v="B"] .row .thumb{border-radius:9px;overflow:hidden}
+html[data-v="B"] .colophon{border-top:0;padding-top:0}
+html[data-v="B"] .topbar{border-bottom:0;padding-bottom:0;margin-bottom:40px}
+html[data-v="B"] .startline{border-top:0;padding-top:0;margin-top:28px}
+html[data-v="B"] .facts{gap:8px;margin-top:22px}
+html[data-v="B"] .facts div{background:rgba(42,36,29,.055);border-radius:16px;padding:20px 18px 16px;border-top:0}
+html[data-v="B"] #pf{border-bottom:0}
+html[data-v="B"] .card summary{border-bottom:0;padding:12px 0 6px}
+/* soft card: one leg per row, name first, a single quiet line of stats beneath — no loss figure, no columns */
+html[data-v="B"] .card ol{display:flex;flex-direction:column;gap:6px;margin-top:0}
+html[data-v="B"] .card li{grid-template-columns:24px minmax(0,1fr);grid-template-areas:"n name" ". st";row-gap:3px;padding:12px 16px 13px;margin:0 -16px;border-bottom:0;border-radius:14px;transition:background .2s,color .2s}
+html[data-v="B"] .card li b{grid-area:n;font:500 11px var(--sans);color:var(--ink-3);letter-spacing:.06em;font-style:normal;align-self:start;margin-top:5px}
+html[data-v="B"] .card li .lg{grid-area:name;font-size:18px;padding-right:0}
+html[data-v="B"] .card li .st{grid-area:st;display:flex;gap:0;text-align:left;font:400 13px var(--sans);letter-spacing:.01em;color:var(--ink-2)}
+html[data-v="B"] .card li .st span+span::before{content:"·";color:var(--ink-3);padding:0 8px}
+html[data-v="B"] .card li .st i{color:inherit}
+html[data-v="B"] .card s{display:none}
+html[data-v="B"] .card li[data-i]:hover,html[data-v="B"] .card li.hot{background:rgba(42,36,29,.055);color:var(--ink)}
+html[data-v="B"] .card li.hot .lg,html[data-v="B"] .card li[data-i]:hover .lg{color:var(--route)}
+html[data-v="B"] .card li.tot{border-top:0;padding-top:10px;margin-top:4px}
+html[data-v="B"] .card li.tot .lg{font-style:italic;font-size:16px;color:var(--ink-2)}
+html[data-v="B"] .card li.tot .st{color:var(--ink-3)}
+html[data-v="B"] .preview{border:0;background:var(--ink);color:var(--page);border-radius:999px;padding:15px 22px;justify-content:center;gap:12px;transition:background .2s}
+html[data-v="B"] .preview small{color:var(--paper-2);margin-left:0}
+html[data-v="B"] .preview:hover{background:var(--route);color:var(--page)}
+html[data-v="B"] .ph{border-radius:16px}
+html[data-v="B"] .story figure.hot .ph{box-shadow:0 0 0 2px var(--ink)}
+html[data-v="B"] .sec h3{border-bottom:0;padding-bottom:6px}
+html[data-v="B"] .notes li{border-bottom:0;padding:10px 0}
+html[data-v="B"] .also button{border-bottom:0;padding:13px 14px;margin:0 -14px;width:calc(100% + 28px);border-radius:14px;transition:background .2s,color .2s}
+html[data-v="B"] .also button:hover{background:rgba(42,36,29,.055)}
+html[data-v="B"] .pager{border-top:0;background:rgba(42,36,29,.055);border-radius:18px;padding:22px 22px 24px}
+html[data-v="B"] .mapchip{border:0;border-radius:999px;padding:11px 20px 11px 16px;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
+html[data-v="B"] .leaflet-tooltip.ride-tip{border:0;border-radius:14px;padding:10px 14px 11px;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
+html[data-v="B"] .legend i{border-radius:2px}
+
+/* ---- panel hide (A, B) ---- */
+.ptab{display:none}
+html.float .ptab{all:unset;cursor:pointer;position:absolute;z-index:1101;top:72px;left:516px;transform:none;display:flex;align-items:center;justify-content:center;width:22px;height:56px;background:var(--page);color:var(--ink-2);border:1px solid rgba(42,36,29,.22);border-left:0;font:500 15px/1 var(--sans);box-shadow:8px 0 24px -12px rgba(42,36,29,.4);transition:left .5s cubic-bezier(.2,.7,.2,1),color .2s,width .2s}
+html.float .ptab:hover{color:var(--ink)}
+html.float .ptab:focus-visible{outline:1px solid var(--route);outline-offset:2px}
+html.float .ptab .ptab-show{display:none;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;writing-mode:vertical-rl;transform:rotate(180deg)}
+html[data-v="B"].float .ptab{border:0;border-radius:0 12px 12px 0}
+html.float #side{transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .4s}
+html.float.phide #side{transform:translateX(calc(-100% - 40px));opacity:0;pointer-events:none}
+html.float.phide .ptab{left:0;width:30px;height:120px;border-left:0}
+html.float.phide .ptab .ptab-hide{display:none}
+html.float.phide .ptab .ptab-show{display:block}
+html.float.phide .legend,html.float.phide .mapchip{left:52px}
+html.float.phide .leaflet-bottom.leaflet-left{left:28px}
+html.float .legend,html.float .mapchip,html.float .leaflet-bottom.leaflet-left{transition:left .5s cubic-bezier(.2,.7,.2,1)}
