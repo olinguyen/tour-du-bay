@@ -75,7 +75,7 @@ export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, 
         ))}
       </div>
       <div className="hdr">
-        <span id="count-list">{plural(rides.length)}</span>
+        <span id="count-list" aria-live="polite">{plural(rides.length)}</span>
         <div className="r" id="sort">
           {SORT_KEYS.map(o => {
             const on = o.k === sort.key;
@@ -106,11 +106,13 @@ export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, 
           return (
             <section className="grp" data-area={areaSlug(a)} key={a}>
               {!area && (
-                <button className="grp-h" title={`Show only ${a}`} onClick={() => chooseArea(a)}>
-                  <i />
-                  <span>{a}</span>
-                  <small>{plural(grp.length)}</small>
-                </button>
+                <h2 className="grp-hd">
+                  <button className="grp-h" title={`Show only ${a}`} onClick={() => chooseArea(a)}>
+                    <i />
+                    <span>{a}</span>
+                    <small>{plural(grp.length)}</small>
+                  </button>
+                </h2>
               )}
               {grp.map(r => (
                 <Row key={r.slug} ride={r} hot={r.slug === hot} onHot={onHot} onOpen={onOpen} />
@@ -132,38 +134,47 @@ interface RowProps {
 
 const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
   const shape = useMemo(() => outline(r.route), [r]);
+  const hours = r.hours.replace(/\s*h$/, '');
+  const desc = `row-desc-${r.slug}`;
+  // the description precedes the button so the last row stays :last-child; the visible stats are hidden from AT in its favour
   return (
-    <button
-      className={'row' + (hot ? ' hot' : '')}
-      data-slug={r.slug}
-      data-area={areaSlug(r.area)}
-      onMouseEnter={() => onHot(r.slug)}
-      onMouseLeave={() => onHot(null)}
-      onFocus={e => e.currentTarget.matches(':focus-visible') && onHot(r.slug)}
-      onBlur={() => onHot(null)}
-      onClick={() => onOpen(r.slug)}
-    >
-      <div className="thumb" aria-hidden="true">
-        <span className="idx">{pad2(r.num)}</span>
-        <Sparkline ride={r} />
-        <svg className="shape" viewBox="0 0 96 68">
-          <path d={shape.d} />
-          <circle cx={shape.cx} cy={shape.cy} />
-        </svg>
-      </div>
-      <div>
-        <span className="name">{r.name}</span>
-        <div className="stats">
-          <span>{r.miles} mi</span>
-          <i>·</i>
-          <span>{fmt(r.feet)} ft</span>
-          <i>·</i>
-          <span>{r.hours.replace(/\s*h$/, '')} h</span>
-        </div>
-        <div className="row-sub">
-          <span className="tag">{r.area}</span> · from {place(r.start)}
-        </div>
-      </div>
-    </button>
+    <>
+      <span className="sr-only" id={desc}>
+        {r.area} · {r.miles} miles · {fmt(r.feet)} feet of climbing · {hours} hours · starts at {place(r.start)}
+      </span>
+      <button
+        className={'row' + (hot ? ' hot' : '')}
+        data-slug={r.slug}
+        aria-describedby={desc}
+        data-area={areaSlug(r.area)}
+        onMouseEnter={() => onHot(r.slug)}
+        onMouseLeave={() => onHot(null)}
+        onFocus={e => e.currentTarget.matches(':focus-visible') && onHot(r.slug)}
+        onBlur={() => onHot(null)}
+        onClick={() => onOpen(r.slug)}
+      >
+        <span className="thumb" aria-hidden="true">
+          <span className="idx">{pad2(r.num)}</span>
+          <Sparkline ride={r} />
+          <svg className="shape" viewBox="0 0 96 68">
+            <path d={shape.d} />
+            <circle cx={shape.cx} cy={shape.cy} />
+          </svg>
+        </span>
+        <span>
+          <span className="name">{r.name}</span>
+          <span className="stats" aria-hidden="true">
+            <span>{r.miles} mi</span>
+            <i>·</i>
+            <span>{fmt(r.feet)} ft</span>
+            <i>·</i>
+            <span>{hours} h</span>
+          </span>
+          <span className="row-sub" aria-hidden="true">
+            <span className="tag">{r.area}</span> · from {place(r.start)}
+          </span>
+        </span>
+      </button>
+    </>
   );
 });

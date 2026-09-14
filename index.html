@@ -13,6 +13,8 @@
     />
   </head>
   <body class="regions">
+    <!-- the app routes on the hash, so a plain #side link would close an open ride; focus the panel directly instead -->
+    <a class="skip" href="#side" onclick="event.preventDefault();var s=document.getElementById('side');if(s){s.tabIndex=-1;s.focus()}">Skip to rides</a>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
