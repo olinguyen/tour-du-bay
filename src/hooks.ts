@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { findRide } from './data/guide';
 import type { Ride } from './data/types';
 import { GuideMap, type GuideMapEvents } from './map/GuideMap';
@@ -32,6 +32,19 @@ export function useHashRoute(): [string | null, (slug: string | null) => void] {
     setSlug(next);
   }, []);
   return [slug, navigate];
+}
+
+/** Whether a media query matches, kept live through matchMedia's change events (rotation, window resize). */
+export function useMediaQuery(query: string): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mq = matchMedia(query);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
 }
 
 export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapEvents): GuideMap | null {

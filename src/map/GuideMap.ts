@@ -9,8 +9,10 @@ import { addLabels, terrainLayer } from './terrain';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 const MAX_BOUNDS: [LatLng, LatLng] = [[36.95, -123.3], [38.45, -121.15]];
-/** map px the floating panel covers: 16 margin + 500 panel + 8 gap */
-const PANEL_PX = 524;
+/** map px around the floating panel: 16 margin + 8 gap; the panel's own width comes from the stylesheet (--panel-w) */
+const PANEL_GAP_PX = 24;
+/** map px the floating toggle button covers along the bottom edge on a phone */
+const TOGGLE_PX = 80;
 
 export interface GuideMapEvents {
   onHover(slug: string | null): void;
@@ -52,6 +54,8 @@ export class GuideMap {
   private previewing = false;
   /** whether the floating panel is showing over the map's left edge; views are fitted around it */
   private covered = true;
+  /** phone layout: the panel is a document under the map, which fills the screen when opened */
+  private mobile = false;
   private loaded = false;
   /** the latest view change requested before the container had a size */
   private pendingView: (() => void) | null = null;
@@ -149,6 +153,17 @@ export class GuideMap {
     this.covered = covered;
     this.map.invalidateSize(false);
     if (refit) this.refit(0.7);
+  }
+
+  setMobile(mobile: boolean) {
+    this.mobile = mobile;
+    this.map.invalidateSize(false);
+  }
+
+  /** the container just became visible (the phone map was mounted hidden): re-measure and settle on the current view */
+  refresh() {
+    this.map.invalidateSize(false);
+    if (!this.previewing) this.refit(0.7);
   }
 
   openRide(ride: Ride) {
@@ -314,8 +329,17 @@ export class GuideMap {
   }
 
   private pad(kind: 'home' | 'ride' | 'area'): L.FitBoundsOptions {
+    if (this.mobile) {
+      // nothing covers the left edge; the toggle button sits along the bottom
+      if (kind === 'home') return { paddingTopLeft: [16, 16], paddingBottomRight: [16, TOGGLE_PX] };
+      if (kind === 'ride') return { paddingTopLeft: [24, 90], paddingBottomRight: [24, TOGGLE_PX + 16] };
+      return { paddingTopLeft: [24, 40], paddingBottomRight: [24, TOGGLE_PX] };
+    }
+    // the stylesheet sets --panel-w per breakpoint (registered with @property, so it computes to px)
+    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+    const px = panel ? panel + PANEL_GAP_PX : 0;
     // on a narrow window the panel covers most of the map; padding for it would leave no room to fit anything
-    const f = this.covered && !this.previewing && PANEL_PX < this.map.getSize().x * 0.6 ? PANEL_PX : 0;
+    const f = this.covered && !this.previewing && px < this.map.getSize().x * 0.6 ? px : 0;
     if (kind === 'home') return { paddingTopLeft: [20 + f, 20], paddingBottomRight: [20, 20] };
     if (kind === 'ride') return { paddingTopLeft: [70 + f, 90], paddingBottomRight: [70, 110] };
     return { paddingTopLeft: [70 + f, 70], paddingBottomRight: [70, 70] };
