@@ -1,5 +1,8 @@
 # Node / Vite
 node_modules/
+
+# Claude Code agent worktrees
+/.claude/worktrees/
 *.tsbuildinfo
 
 # Byte-compiled / optimized / DLL files

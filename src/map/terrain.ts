@@ -7,7 +7,9 @@ import { esc } from '../lib/html';
 /** AWS Terrain Tiles, Terrarium encoding: elev_m = R*256 + G + B/256 − 32768. USGS 3DEP/SRTM + NOAA ETOPO1, CORS *. */
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const ATTRIBUTION =
-  'Terrain: USGS 3DEP/SRTM courtesy of the U.S. Geological Survey, ETOPO1 from NOAA, via AWS Terrain Tiles · Water: © OpenStreetMap contributors';
+  'Terrain: USGS 3DEP/SRTM &amp; NOAA ETOPO1 via AWS Terrain Tiles · Water © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+/** the extent of src/data/bay-water.json (the bbox scripts/fetch-water.mjs fetches; matches GuideMap's MAX_BOUNDS) */
+const WATER = { s: 36.95, w: -123.3, n: 38.45, e: -121.15 };
 
 const rgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 const GROUND_HEX = '#ece3cf';
@@ -47,14 +49,29 @@ function cellSize(c: L.Coords) {
   return (EQ_M_PER_PX * Math.cos(lat)) / 2 ** c.z;
 }
 
-/** Decode Terrarium RGB into metres; sea floor is flattened so bathymetry doesn't shade under the water overlay. */
-function decode(px: Uint8ClampedArray): Float32Array {
+/** Decode Terrarium RGB into metres. Sea floor is flattened so bathymetry doesn't shade; `sea` marks those pixels. */
+function decode(px: Uint8ClampedArray, sea: Uint8Array): Float32Array {
   const N = SIZE * SIZE, z = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     const p = i * 4;
-    z[i] = Math.max(0, px[p] * 256 + px[p + 1] + px[p + 2] / 256 - 32768);
+    const m = px[p] * 256 + px[p + 1] + px[p + 2] / 256 - 32768;
+    if (m > 0) z[i] = m;
+    else sea[i] = 1;
   }
   return z;
+}
+
+/** the tile's lat/lng extent, from its web-mercator coordinates */
+function tileBounds(c: L.Coords) {
+  const n = 2 ** c.z;
+  const lat = (y: number) => (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * y) / n)) * 180) / Math.PI;
+  return { w: (c.x / n) * 360 - 180, e: ((c.x + 1) / n) * 360 - 180, n: lat(c.y), s: lat(c.y + 1) };
+}
+
+/** whether the water polygons cover this tile; beyond them the sea has to come from the tile itself */
+function underWaterOverlay(c: L.Coords) {
+  const b = tileBounds(c);
+  return b.w >= WATER.w && b.e <= WATER.e && b.s >= WATER.s && b.n <= WATER.n;
 }
 
 /** Horn hillshade in [0, 1]: surface normal · sun. Edges are clamped so a tile shades without its neighbours (faint seams). */
@@ -78,9 +95,13 @@ function shade(z: Float32Array, cell: number, exag: number, out: Float32Array) {
 /** Map hillshade onto the paper ramp: flat ground sits at FLAT_LUM, sunlit faces lift towards plain ground, shadows tint. */
 function paint(ctx: CanvasRenderingContext2D, dem: HTMLImageElement, coords: L.Coords): ImageData {
   ctx.drawImage(dem, 0, 0, SIZE, SIZE);
-  const z = decode(ctx.getImageData(0, 0, SIZE, SIZE).data);
+  const sea = new Uint8Array(SIZE * SIZE);
+  const z = decode(ctx.getImageData(0, 0, SIZE, SIZE).data, sea);
   const hs = new Float32Array(SIZE * SIZE);
   shade(z, cellSize(coords), exaggeration(coords.z), hs);
+  // inside the water polygons' extent the overlay draws the sea; outside it, sea-level pixels are left clear so the
+  // map's water-coloured background shows through (the ocean past the map's edge at low zoom)
+  const seaClear = !underWaterOverlay(coords);
   const out = ctx.createImageData(SIZE, SIZE), o = out.data;
   for (let i = 0, N = SIZE * SIZE; i < N; i++) {
     // normalise so flat ground (shade = SUN_UP) lands at FLAT_LUM, with an ambient floor under the shadows
@@ -91,7 +112,7 @@ function paint(ctx: CanvasRenderingContext2D, dem: HTMLImageElement, coords: L.C
     o[p] = GROUND[0] * (s + ((1 - s) * TINT[0]) / 255);
     o[p + 1] = GROUND[1] * (s + ((1 - s) * TINT[1]) / 255);
     o[p + 2] = GROUND[2] * (s + ((1 - s) * TINT[2]) / 255);
-    o[p + 3] = 255;
+    o[p + 3] = seaClear && sea[i] ? 0 : 255;
   }
   ctx.putImageData(out, 0, 0);
   return out;
@@ -111,7 +132,6 @@ const TerrainLayer = L.GridLayer.extend({
     maxNativeZoom: 14,
     maxZoom: 15,
     minZoom: 7,
-    updateWhenIdle: true,
     updateWhenZooming: false,
     keepBuffer: 2,
     attribution: ATTRIBUTION,
@@ -122,19 +142,23 @@ const TerrainLayer = L.GridLayer.extend({
     tile.className = 'terrain-tile';
     const ctx = tile.getContext('2d', { willReadFrequently: true })!;
     const key = tileKey(coords), hit = cache.get(key);
+    // Leaflet expects done() after createTile returns, and a tile pruned meanwhile (and maybe re-created) must not
+    // report in for its replacement: a detached canvas is stale
+    const ready = () => tile.isConnected && done(undefined, tile);
     if (hit) {
       remember(key, hit);
       ctx.putImageData(hit, 0, 0);
-      // Leaflet expects done() after createTile returns
-      setTimeout(() => done(undefined, tile), 0);
+      queueMicrotask(ready);
       return tile;
     }
     load(tileUrl(coords))
       .then(dem => {
+        if (!tile.isConnected) return;
         remember(key, paint(ctx, dem, coords));
-        done(undefined, tile);
+        ready();
       })
       .catch(err => {
+        if (!tile.isConnected) return;
         // offline, or the tile came back without CORS headers (getImageData throws): plain ground
         ctx.fillStyle = GROUND_HEX;
         ctx.fillRect(0, 0, SIZE, SIZE);
@@ -155,18 +179,50 @@ const TerrainGroup = L.LayerGroup.extend({
 }) as unknown as new (layers?: L.Layer[]) => L.LayerGroup;
 
 export function terrainLayer(): L.LayerGroup {
+  // its own canvas renderer, drawn well past the viewport so pans and the preview's per-frame moves don't reveal
+  // shaded ground where the sea should be before the next redraw
+  const renderer = L.canvas({ pane: 'water', padding: 1 });
   const water = L.geoJSON(undefined, {
     pane: 'water',
     interactive: false,
-    style: { className: 'water', color: COAST_HEX, weight: 1, opacity: 1, fillColor: WATER_HEX, fillOpacity: 1 },
+    // the sea is closed along the data's bbox, so its outline is drawn separately, skipping those edges
+    style: f => ({ renderer, color: COAST_HEX, weight: 1, opacity: 1, fillColor: WATER_HEX, fillOpacity: 1, stroke: f?.properties.kind !== 'sea' }),
   });
   // the polygons are ~400 KB; loading them as their own chunk keeps them off the app's critical path
   import('../data/bay-water.json')
-    .then(m => water.addData(m.default as GeoJSON.FeatureCollection))
-    .catch(() => {
-      /* offline before the chunk arrived: the map keeps its plain water-coloured background */
+    .then(m => {
+      const fc = m.default as GeoJSON.FeatureCollection<GeoJSON.Polygon, { kind: string }>;
+      water.addData(fc);
+      for (const f of fc.features) {
+        if (f.properties.kind !== 'sea') continue;
+        for (const ring of f.geometry.coordinates) water.addLayer(coastline(ring, renderer));
+      }
+    })
+    .catch(err => {
+      // offline before the chunk arrived, or a stale page after a redeploy: the Bay would read as land
+      console.warn('water polygons failed to load', err);
     });
   return new TerrainGroup([new TerrainLayer(), water]);
+}
+
+/** The shoreline of a sea ring: its edges except the ones that run along the water data's bbox. */
+function coastline(ring: GeoJSON.Position[], renderer: L.Renderer): L.Layer {
+  const EPS = 1e-6;
+  const onEdge = ([x, y]: GeoJSON.Position) =>
+    Math.abs(x - WATER.w) < EPS || Math.abs(x - WATER.e) < EPS || Math.abs(y - WATER.s) < EPS || Math.abs(y - WATER.n) < EPS;
+  const runs: L.LatLngExpression[][] = [];
+  let run: L.LatLngExpression[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i];
+    // an edge is on the bbox when both its ends are (a coast vertex can sit on the bbox too, so runs still join there)
+    if (i && onEdge(p) && onEdge(ring[i - 1])) {
+      if (run.length > 1) runs.push(run);
+      run = [];
+    }
+    run.push([p[1], p[0]]);
+  }
+  if (run.length > 1) runs.push(run);
+  return L.polyline(runs, { renderer, pane: 'water', interactive: false, color: COAST_HEX, weight: 1, opacity: 1 });
 }
 
 /** Labels fade by zoom: water always, peaks + minor towns from ~9.5, major towns always; all fade out during the zoom animation. */

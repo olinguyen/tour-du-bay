@@ -20,7 +20,7 @@ h1,h2,h3,p{margin:0}
 
 /* ---- Leaflet re-skin ---- */
 .leaflet-container{background:var(--map-bg);font-family:var(--serif)}
-.leaflet-container .leaflet-control-attribution{background:transparent;color:var(--ink-3);font:9.5px/1.4 var(--sans);letter-spacing:.04em;padding:2px 8px 4px}
+.leaflet-container .leaflet-control-attribution{background:transparent;color:var(--ink-3);font:9.5px/1.4 var(--sans);letter-spacing:.04em;padding:2px 8px 4px;max-width:min(60%,640px);white-space:normal;text-align:right}
 .leaflet-container .leaflet-control-attribution a{color:inherit;text-decoration:underline}
 .leaflet-control-scale-line{border:1px solid var(--ink-2);border-top:none;background:transparent;color:var(--ink-2);font:500 11px/1.3 var(--sans);letter-spacing:.06em;text-transform:uppercase;text-shadow:none;padding:1px 4px}
 .terrain-tile{image-rendering:auto}

@@ -74,7 +74,7 @@ describe('legPath', () => {
   it('otherwise traces the points inside the leg', () => {
     const d = legPath(s, { ...leg, a: 0, b: 0.2 });
     expect(d.startsWith('M')).toBe(true);
-    expect(d.split('L')).toHaveLength(3);
+    expect(d.split('L')).toHaveLength(5); // miles 0, 0.5, 1, 1.5, 2
   });
 });
 

@@ -31,30 +31,44 @@ interface Props {
   sort: Sort;
   hot: string | null;
   side: RefObject<HTMLElement | null>;
+  /** phone layout: the window scrolls the list, not #side */
+  mobile: boolean;
   onArea(a: Area | null): void;
   onSort(s: Sort): void;
   onHot(slug: string | null): void;
   onOpen(slug: string): void;
 }
 
-export function ListView({ rides, area, sort, hot, side, onArea, onSort, onHot, onOpen }: Props) {
+/** the element that scrolls the list, with positions measured in its scroll space */
+function scroller(side: HTMLElement, mobile: boolean) {
+  const el = mobile ? document.scrollingElement! : side;
+  const origin = mobile ? 0 : side.getBoundingClientRect().top;
+  return {
+    el,
+    height: mobile ? window.innerHeight : side.clientHeight,
+    top: (n: HTMLElement) => n.getBoundingClientRect().top - origin + el.scrollTop,
+  };
+}
+
+export function ListView({ rides, area, sort, hot, side, mobile, onArea, onSort, onHot, onOpen }: Props) {
   const chips = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
   const chooseArea = (a: Area | null) => {
     onArea(a);
-    const el = side.current;
-    if (el && chips.current) el.scrollTo({ top: Math.min(el.scrollTop, chips.current.offsetTop - 24), behavior: scrollBehavior() });
+    if (!side.current || !chips.current) return;
+    const s = scroller(side.current, mobile);
+    s.el.scrollTo({ top: Math.min(s.el.scrollTop, s.top(chips.current) - 24), behavior: scrollBehavior() });
   };
 
   // keep the hot row in view when it's highlighted from the map or the keyboard
   useEffect(() => {
-    const el = side.current;
     const row = hot && list.current?.querySelector<HTMLElement>(`.row[data-slug="${hot}"]`);
-    if (!el || !row) return;
-    const top = row.offsetTop - el.clientHeight / 2 + row.offsetHeight / 2;
-    if (Math.abs(el.scrollTop - top) > el.clientHeight * 0.4) el.scrollTo({ top, behavior: scrollBehavior() });
-  }, [hot, side]);
+    if (!side.current || !row) return;
+    const s = scroller(side.current, mobile);
+    const top = s.top(row) - s.height / 2 + row.offsetHeight / 2;
+    if (Math.abs(s.el.scrollTop - top) > s.height * 0.4) s.el.scrollTo({ top, behavior: scrollBehavior() });
+  }, [hot, side, mobile]);
 
   return (
     <div id="view-list" className="view enter">

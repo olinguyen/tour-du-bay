@@ -15,5 +15,5 @@ key is used; tiles are requested directly and shaded with a Horn hillshade in `s
 **Water.** `src/data/bay-water.json` holds the Pacific, San Francisco Bay, San Pablo Bay, Suisun Bay and the larger
 lakes and reservoirs inside the map's bounds, built by `scripts/fetch-water.mjs` from OpenStreetMap
 (`natural=coastline` ways, `natural=water` ways and multipolygon relations) via the Overpass API, simplified to about
-50 m. Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the
+50 m and keeping water bodies of 0.2 km² and up (the script's defaults). Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the
 [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/) (ODbL). Retrieved September 13, 2026.

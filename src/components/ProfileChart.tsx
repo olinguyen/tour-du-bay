@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import { memo, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Leg, Ride, RouteCard } from '../data/types';
 import { annotations, legPath, profileScale, ticks, type ProfileScale } from '../lib/profileChart';
 import { elevAt, fmt, gradeAt } from '../lib/route';
@@ -56,6 +56,8 @@ export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub,
         aria-label={`Elevation profile: ${ride.miles} miles, high point ${Math.round(ride.maxElev)} ft`}
         onPointerMove={move}
         onPointerDown={move}
+        // a click on the chart shouldn't blur the keyboard scrubber (its blur hides the cursor the click just placed)
+        onMouseDown={e => e.preventDefault()}
         onPointerLeave={() => onScrub(null)}
       >
         {tk.y.map(t => (
@@ -105,13 +107,12 @@ export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub,
 
 /** Keyboard access to the profile: a visually hidden slider that mirrors the scrub store. Focusing it shows the cursor, leaving hides it. */
 function Scrubber({ ride, scrub, onScrub }: Pick<Props, 'ride' | 'scrub' | 'onScrub'>) {
-  const v = useStore(scrub);
-  // where the slider rests while the cursor is hidden, so focus and the arrows resume from the last position rather than the start
+  const [focused, setFocused] = useState(false);
+  // only mirror the store while focused: the preview writes it every frame, and nobody reads an unfocused slider
+  const v = useSyncExternalStore(scrub.subscribe, () => (focused ? scrub.get() : null));
+  // where the slider rests while unfocused, so the arrows resume from the last position rather than the start
   const last = useRef(0);
-  const f = v ? v.f : last.current;
-  useEffect(() => {
-    last.current = f;
-  });
+  const f = v ? (last.current = v.f) : last.current;
   // Shift+arrow and PageUp/Down jump; plain arrows keep the native one-step move; Escape hands the shortcuts back to the page
   const keys = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') return e.currentTarget.blur();
@@ -132,8 +133,14 @@ function Scrubber({ ride, scrub, onScrub }: Pick<Props, 'ride' | 'scrub' | 'onSc
       aria-valuetext={scrubText(ride, f)}
       onChange={e => onScrub(e.currentTarget.valueAsNumber / STEPS)} // React's onChange is the native input event
       onKeyDown={keys}
-      onFocus={() => onScrub(f)}
-      onBlur={() => onScrub(null)}
+      onFocus={() => {
+        setFocused(true);
+        onScrub(scrub.get()?.f ?? f);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onScrub(null);
+      }}
     />
   );
 }

@@ -47,6 +47,8 @@ export default function App() {
   const openRide = useCallback((s: string) => navigate(s), [navigate]);
   const closeRide = useCallback(() => navigate(null), [navigate]);
 
+  /** ends a running preview; set once the flyover hook exists, used by callbacks declared before it */
+  const stopFly = useRef(() => {});
   const gm = useGuideMap(mapEl, {
     onHover: setHot,
     onOpen: openRide,
@@ -55,17 +57,24 @@ export default function App() {
       const f = side.current?.querySelector<HTMLElement>(`figure[data-i="${i}"]`);
       if (!f) return;
       if (live.current.mobile) {
-        // the story is under the map: close it and scroll the page to the figure
+        // the story is under the map: close it (ending any preview) and scroll the page to the figure
+        stopFly.current();
         setMapOpen(false);
         window.scrollTo({ top: f.getBoundingClientRect().top + window.scrollY - 24, behavior: scrollBehavior() });
       } else side.current!.scrollTo({ top: f.offsetTop - 24, behavior: scrollBehavior() });
     },
   });
   const { flying, toggle: toggleFlyover } = useFlyover(gm, ride, scrub);
+  stopFly.current = () => {
+    if (flying) toggleFlyover();
+  };
   const toggleFly = useCallback(() => {
     setPeek(false);
-    // on a phone the preview plays on the map layer, so bring it up
-    if (live.current.mobile && !live.current.flying) setMapOpen(true);
+    // on a phone the preview plays on the map layer, so bring it up (remembering where the story was)
+    if (live.current.mobile && !live.current.flying && !live.current.mapOpen) {
+      docScroll.current = window.scrollY;
+      setMapOpen(true);
+    }
     toggleFlyover();
   }, [toggleFlyover]);
 
@@ -83,7 +92,10 @@ export default function App() {
     scrub.set(null);
     // a ride opened from the phone map reads as a page: come back out of the map to it
     setMapOpen(false);
-    if (live.current.mobile) window.scrollTo(0, ride ? 0 : listScroll.current);
+    if (live.current.mobile) {
+      side.current?.removeAttribute('inert'); // now, so the focus effect below can reach the heading
+      window.scrollTo(0, ride ? 0 : listScroll.current);
+    }
     else if (side.current) side.current.scrollTop = ride ? 0 : listScroll.current;
     document.body.classList.toggle('ride', !!ride);
     document.title = ride ? `${ride.name} — Tour du Bay` : TITLE;
@@ -108,7 +120,8 @@ export default function App() {
     if (hot) cursor.current = displayed.findIndex(r => r.slug === hot);
   }, [hot, displayed]);
 
-  // ---- mirror state onto the map
+  // ---- mirror state onto the map (the layout flag first: the fits below pad for it)
+  useEffect(() => gm?.setMobile(isMobile), [gm, isMobile]);
   useEffect(() => gm?.setHot(hot), [gm, hot]);
   useEffect(() => gm?.setArea(area), [gm, area]);
   useEffect(() => void (ride ? gm?.openRide(ride) : gm?.closeRide()), [gm, ride]);
@@ -136,8 +149,8 @@ export default function App() {
     if (!gm) return;
     const crossed = wasMobile.current !== isMobile;
     wasMobile.current = isMobile;
-    gm.setMobile(isMobile);
-    gm.setPanelCovered(!panelHidden, refitOnPanel.current || crossed);
+    // mid-preview the map is following the rider; a refit would fight it
+    gm.setPanelCovered(!panelHidden, (refitOnPanel.current || crossed) && !live.current.flying);
     refitOnPanel.current = false;
   }, [gm, isMobile, panelHidden]);
 
@@ -169,7 +182,7 @@ export default function App() {
     const active = document.activeElement;
     // on a phone the two layers cover each other in turn; on desktop only the hidden panel is out of reach
     const hideSide = isMobile ? mapOpen : collapsed;
-    document.documentElement.classList.toggle('phide', collapsed);
+    document.documentElement.classList.toggle('phide', collapsed && !isMobile);
     el?.toggleAttribute('inert', hideSide);
     mapwrap.current?.toggleAttribute('inert', isMobile && !mapOpen);
     if (isMobile) {
@@ -202,7 +215,9 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (e.altKey || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      // fields keep their keys; the profile's slider only hands back the panel toggle
+      if (t.closest('input, textarea, select, [contenteditable]') && !(e.key === '[' && t.matches('input[type=range]'))) return;
       // a focused map pans with the arrow keys
       if (e.key.startsWith('Arrow') && t.closest('.leaflet-container')) return;
       const k = keys.current;
@@ -214,7 +229,7 @@ export default function App() {
         if (e.key === 'Escape') k.closeRide();
         else if (e.key === 'ArrowRight') k.openRide(k.seq[(i + 1) % n].slug);
         else if (e.key === 'ArrowLeft') k.openRide(k.seq[(i + n - 1) % n].slug);
-        else if (e.key === ' ' && !t.closest('button, summary, a')) {
+        else if (e.key === ' ' && !t.closest('button, summary, a, figure')) {
           e.preventDefault();
           k.toggleFly();
         }
@@ -225,7 +240,7 @@ export default function App() {
         e.preventDefault();
         cursor.current = (cursor.current + (e.key === 'ArrowDown' ? 1 : -1) + vis.length) % vis.length;
         setHot(vis[cursor.current].slug);
-      } else if (e.key === 'Enter' && cursor.current >= 0 && !t.closest('button, summary, a')) {
+      } else if (e.key === 'Enter' && cursor.current >= 0 && !t.closest('button, summary, a, figure')) {
         k.openRide(vis[cursor.current].slug);
       } else if (e.key === 'Escape') {
         cursor.current = -1;
@@ -243,10 +258,22 @@ export default function App() {
 
   return (
     <>
+      {/* the app routes on the hash, so a plain #side link would close an open ride: focus the panel directly */}
+      <a
+        className="skip"
+        href="#side"
+        onClick={e => {
+          e.preventDefault();
+          side.current?.focus();
+        }}
+      >
+        Skip to rides
+      </a>
       <aside
         id="side"
         className="grain"
         ref={side}
+        tabIndex={-1}
         onScroll={e => {
           if (!ride) listScroll.current = e.currentTarget.scrollTop;
         }}
@@ -273,6 +300,7 @@ export default function App() {
             sort={sort}
             hot={hot}
             side={side}
+            mobile={isMobile}
             onArea={setArea}
             onSort={setSort}
             onHot={setHot}

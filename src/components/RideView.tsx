@@ -141,14 +141,19 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         <ol>
           {card.legs.map((l, i) => {
             const mi = l.mi.toFixed(1), gain = fmt(Math.round(l.gain / 10) * 10), t = hm(l.t);
+            // hover lives on the li so its padding highlights the same as its CSS :hover does
             return (
-              <li key={i} data-i={i} className={leg === l ? 'hot' : undefined}>
+              <li
+                key={i}
+                data-i={i}
+                className={leg === l ? 'hot' : undefined}
+                onMouseEnter={() => onLeg(l)}
+                onMouseLeave={() => onLeg(null)}
+              >
                 <button
                   type="button"
                   className="leg"
                   aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${mi} miles, +${gain} feet, ${t}`}
-                  onMouseEnter={() => onLeg(l)}
-                  onMouseLeave={() => onLeg(null)}
                   onFocus={() => onLeg(l)}
                   onBlur={() => onLeg(null)}
                   onClick={() => scrubTo({ f: l.b, soft: false })}

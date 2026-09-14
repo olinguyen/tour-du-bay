@@ -27,8 +27,9 @@ describe('elevAt', () => {
     expect(elevAt(PROFILE, 1)).toBe(PROFILE[PROFILE.length - 1][1]);
   });
   it('hits vertices and interpolates between them', () => {
-    expect(elevAt(PROFILE, 0.3)).toBeCloseTo(PROFILE[3][1], 9);
-    expect(elevAt(PROFILE, 0.25)).toBeCloseTo((PROFILE[2][1] + PROFILE[3][1]) / 2, 9);
+    // half-mile samples: mile 3 is index 6, and 2.5 mi sits on the vertex between 2 and 3
+    expect(elevAt(PROFILE, 0.3)).toBeCloseTo(PROFILE[6][1], 9);
+    expect(elevAt(PROFILE, 0.275)).toBeCloseTo((PROFILE[5][1] + PROFILE[6][1]) / 2, 9);
   });
 });
 

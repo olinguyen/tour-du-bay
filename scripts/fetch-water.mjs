@@ -9,7 +9,7 @@
 //                             the water side into rings.
 //   natural=water ways + multipolygon relations — lakes, reservoirs, wide rivers; kept when larger than MIN_AREA_KM2.
 //
-// Usage: node scripts/fetch-water.mjs [--tolerance=50] [--min-area=0.3] [--cache=/tmp/overpass.json]
+// Usage: node scripts/fetch-water.mjs [--tolerance=50] [--min-area=0.2] [--cache=/tmp/overpass.json]
 //   (Node >= 18, no dependencies; --cache keeps the raw Overpass response so tuning runs don't refetch ~50 MB)
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -22,7 +22,7 @@ const OVERPASS = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interp
 const S = 36.95, W = -123.3, N = 38.45, E = -121.15;
 const arg = (name, dflt) => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').split('=')[1] || dflt;
 const TOLERANCE_M = Number(arg('tolerance', 50));
-const MIN_AREA_KM2 = Number(arg('min-area', 0.3));
+const MIN_AREA_KM2 = Number(arg('min-area', 0.2));
 const CACHE = arg('cache', '');
 const MAX_BYTES = 400 * 1024;
 
