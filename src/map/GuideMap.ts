@@ -5,6 +5,7 @@ import type { Area, LatLng, Leg, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion } from '../lib/html';
 import { areaSlug, climbs, fmt, pad2 } from '../lib/route';
+import { lazySvg } from './lazyRenderer';
 import { addLabels, terrainLayer } from './terrain';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
@@ -66,6 +67,8 @@ export class GuideMap {
   constructor(el: HTMLElement, events: GuideMapEvents, initial?: Ride) {
     const map = (this.map = L.map(el, {
       zoomControl: false,
+      // routes redraw only when the view leaves what was drawn, not on every one of the preview's pans
+      renderer: lazySvg({ padding: 0.5 }),
       zoomSnap: 0.25,
       zoomDelta: 0.5,
       wheelPxPerZoomLevel: 140,
@@ -79,7 +82,7 @@ export class GuideMap {
     map.once('load', () => (this.loaded = true));
     map.attributionControl.setPrefix(false);
     L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(map);
-    terrainLayer().addTo(map);
+    terrainLayer(map).addTo(map);
     addLabels(map, LABELS);
     map.on('zoomend', () => this.paintNames());
 
@@ -346,8 +349,9 @@ export class GuideMap {
       if (kind === 'ride') return { paddingTopLeft: [24, 90], paddingBottomRight: [24, TOGGLE_PX + 16] };
       return { paddingTopLeft: [24, 40], paddingBottomRight: [24, TOGGLE_PX] };
     }
-    // the stylesheet sets --panel-w per breakpoint (registered with @property, so it computes to px)
-    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+    // the floating panel's actual width (0 in a layout where it doesn't cover the map)
+    const side = document.getElementById('side');
+    const panel = document.documentElement.classList.contains('float') && side ? side.offsetWidth : 0;
     const px = panel ? panel + PANEL_GAP_PX : 0;
     // on a narrow window the panel covers most of the map; padding for it would leave no room to fit anything
     const f = this.covered && !this.previewing && px < this.map.getSize().x * 0.6 ? px : 0;

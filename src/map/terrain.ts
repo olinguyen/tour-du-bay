@@ -3,6 +3,7 @@
 import L from 'leaflet';
 import type { MapLabel } from '../data/types';
 import { esc } from '../lib/html';
+import { lazyCanvas } from './lazyRenderer';
 
 /** AWS Terrain Tiles, Terrarium encoding: elev_m = R*256 + G + B/256 − 32768. USGS 3DEP/SRTM + NOAA ETOPO1, CORS *. */
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
@@ -38,7 +39,7 @@ function load(url: string, im: HTMLImageElement): Promise<HTMLImageElement> {
   });
 }
 
-const tileKey = (c: L.Coords) => c.toString(); // Leaflet's own 'x:y:z'
+const tileKey = (c: L.Coords) => `${c.x}:${c.y}:${c.z}`;
 const tileUrl = (c: L.Coords) => DEM.replace('{z}', String(c.z)).replace('{x}', String(c.x)).replace('{y}', String(c.y));
 
 /** metres per pixel for a tile: the web-mercator scale at the tile's centre latitude */
@@ -67,11 +68,27 @@ function tileBounds(c: L.Coords) {
   return { w: (c.x / n) * 360 - 180, e: ((c.x + 1) / n) * 360 - 180, n: lat(c.y), s: lat(c.y + 1) };
 }
 
-/** whether the water polygons cover this tile; beyond them the sea has to come from the tile itself */
-function underWaterOverlay(c: L.Coords) {
+/**
+ * Which pixels the water polygons don't cover: beyond their extent the sea has to come from the tile itself, so
+ * sea-level pixels there are left clear. Per pixel, because a tile can straddle the extent's edge (and land below
+ * sea level inside it, the Delta islands, must stay ground). Returns null when the polygons cover the whole tile.
+ */
+function outsideWater(c: L.Coords): { col: Uint8Array; row: Uint8Array } | null {
   const b = tileBounds(c);
-  return b.w >= WATER.w && b.e <= WATER.e && b.s >= WATER.s && b.n <= WATER.n;
+  if (b.w >= WATER.w && b.e <= WATER.e && b.s >= WATER.s && b.n <= WATER.n) return null;
+  const col = new Uint8Array(SIZE), row = new Uint8Array(SIZE), n = 2 ** c.z;
+  for (let x = 0; x < SIZE; x++) {
+    const lng = ((c.x + (x + 0.5) / SIZE) / n) * 360 - 180;
+    col[x] = lng < WATER.w || lng > WATER.e ? 1 : 0;
+  }
+  for (let y = 0; y < SIZE; y++) {
+    const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * (c.y + (y + 0.5) / SIZE)) / n)) * 180) / Math.PI;
+    row[y] = lat < WATER.s || lat > WATER.n ? 1 : 0;
+  }
+  return { col, row };
 }
+/** set if the water polygons never arrived: then the tiles have to draw the sea everywhere */
+let waterMissing = false;
 
 /** Horn hillshade in [0, 1]: surface normal · sun. Edges are clamped so a tile shades without its neighbours (faint seams). */
 function shade(z: Float32Array, cell: number, exag: number, out: Float32Array) {
@@ -100,7 +117,8 @@ function paint(ctx: CanvasRenderingContext2D, dem: HTMLImageElement, coords: L.C
   shade(z, cellSize(coords), exaggeration(coords.z), hs);
   // inside the water polygons' extent the overlay draws the sea; outside it, sea-level pixels are left clear so the
   // map's water-coloured background shows through (the ocean past the map's edge at low zoom)
-  const seaClear = !underWaterOverlay(coords);
+  const outside = waterMissing ? null : outsideWater(coords);
+  const clear = (i: number) => waterMissing || (outside !== null && (outside.col[i & 255] | outside.row[i >> 8]) === 1);
   const out = ctx.createImageData(SIZE, SIZE), o = out.data;
   for (let i = 0, N = SIZE * SIZE; i < N; i++) {
     // normalise so flat ground (shade = SUN_UP) lands at FLAT_LUM, with an ambient floor under the shadows
@@ -111,7 +129,7 @@ function paint(ctx: CanvasRenderingContext2D, dem: HTMLImageElement, coords: L.C
     o[p] = GROUND[0] * (s + ((1 - s) * TINT[0]) / 255);
     o[p + 1] = GROUND[1] * (s + ((1 - s) * TINT[1]) / 255);
     o[p + 2] = GROUND[2] * (s + ((1 - s) * TINT[2]) / 255);
-    o[p + 3] = seaClear && sea[i] ? 0 : 255;
+    o[p + 3] = sea[i] && clear(i) ? 0 : 255;
   }
   return out;
 }
@@ -123,63 +141,48 @@ function remember(key: string, img: ImageData) {
   cache.set(key, img);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
 }
-/**
- * Fetches under way, so a tile pruned and re-created mid-flight (a zoom, a fly) joins the first request instead of
- * repeating it; `waiters` counts the tiles wanting it, and the request is abandoned once no tile does, freeing one of
- * the browser's few connections to the tile host for tiles that are on screen.
- */
-const pending = new Map<string, { job: Promise<ImageData>; img: HTMLImageElement; waiters: number }>();
+/** each tile's fetch while it runs, so the fetch is cancelled if Leaflet unloads the tile first */
+const loading = new WeakMap<HTMLElement, HTMLImageElement>();
 /** one canvas decodes every tile; the tiles themselves only receive pixels */
 let scratch: CanvasRenderingContext2D | null = null;
 
-function shadeTile(coords: L.Coords): Promise<ImageData> {
+function shadeTile(coords: L.Coords, tile: HTMLElement): Promise<ImageData> {
   const key = tileKey(coords), hit = cache.get(key);
   if (hit) {
     remember(key, hit);
     return Promise.resolve(hit);
   }
-  let p = pending.get(key);
-  if (!p) {
-    const img = new Image();
-    const job = load(tileUrl(coords), img)
-      .then(dem => {
-        if (!scratch) {
-          const c = document.createElement('canvas');
-          c.width = c.height = SIZE;
-          scratch = c.getContext('2d', { willReadFrequently: true })!;
-        }
-        const out = paint(scratch, dem, coords);
-        remember(key, out);
-        return out;
-      })
-      .finally(() => pending.delete(key));
-    pending.set(key, (p = { job, img, waiters: 0 }));
-  }
-  p.waiters++;
-  return p.job;
-}
-
-/** a tile Leaflet removed no longer needs its fetch; the last waiter leaving cancels it */
-function release(coords: L.Coords) {
-  const p = pending.get(coords.toString());
-  if (!p || --p.waiters > 0) return;
-  pending.delete(coords.toString());
-  p.img.src = ''; // cancels the request; onerror rejects the job, which no tile is waiting on
+  const img = new Image();
+  loading.set(tile, img);
+  return load(tileUrl(coords), img)
+    .then(dem => {
+      if (!scratch) {
+        const c = document.createElement('canvas');
+        c.width = c.height = SIZE;
+        scratch = c.getContext('2d', { willReadFrequently: true })!;
+      }
+      const out = paint(scratch, dem, coords);
+      remember(key, out);
+      return out;
+    })
+    .finally(() => loading.delete(tile));
 }
 
 const TerrainLayer = L.GridLayer.extend({
   options: {
-    tileSize: SIZE,
+    // the DEM set stops at zoom 14 (the map is capped there too)
     maxNativeZoom: 14,
-    maxZoom: 15,
-    minZoom: 7,
     updateWhenZooming: false,
     // one tile beyond the viewport, not Leaflet's two: every tile costs a slow fetch from the DEM host
     keepBuffer: 1,
     attribution: ATTRIBUTION,
   },
   onAdd(map: L.Map) {
-    this.on('tileunload', (e: L.TileEvent) => release(e.coords));
+    // a pruned tile's fetch is abandoned, freeing one of the browser's few connections to the DEM host
+    this.on('tileunload', (e: L.TileEvent) => {
+      const img = loading.get(e.tile);
+      if (img) img.src = '';
+    });
     L.GridLayer.prototype.onAdd.call(this, map);
   },
   createTile(coords: L.Coords, done: L.DoneCallback) {
@@ -189,7 +192,7 @@ const TerrainLayer = L.GridLayer.extend({
     const ctx = tile.getContext('2d')!;
     // the promise settles after createTile has returned (Leaflet expects done() then), and a tile pruned meanwhile
     // (perhaps re-created) must not report in for its replacement: a detached canvas is stale
-    shadeTile(coords)
+    shadeTile(coords, tile)
       .then(img => {
         if (!tile.isConnected) return;
         ctx.putImageData(img, 0, 0);
@@ -208,20 +211,15 @@ const TerrainLayer = L.GridLayer.extend({
   },
 }) as unknown as new (options?: L.GridLayerOptions) => L.GridLayer;
 
-/** The relief raster plus the water polygons; the water gets its own pane just under the overlay pane (400) so routes draw over it. */
-const TerrainGroup = L.LayerGroup.extend({
-  onAdd(map: L.Map) {
-    if (!map.getPane('water')) map.createPane('water').style.zIndex = '350';
-    L.LayerGroup.prototype.onAdd.call(this, map);
-  },
-}) as unknown as new (layers?: L.Layer[]) => L.LayerGroup;
-
-export function terrainLayer(): L.LayerGroup {
-  // its own canvas renderer, drawn well past the viewport so pans and the preview's per-frame moves don't reveal
-  // shaded ground where the sea should be before the next redraw
-  const renderer = L.canvas({ pane: 'water', padding: 1 });
+/**
+ * The relief raster plus the water polygons. The water gets its own pane just under the overlay pane (400) so routes
+ * draw over it, on a renderer that only redraws once the view leaves what it drew (the preview ends a pan every 50 ms).
+ */
+export function terrainLayer(map: L.Map): L.LayerGroup {
+  if (!map.getPane('water')) map.createPane('water').style.zIndex = '350';
+  const relief = new TerrainLayer();
+  const renderer = lazyCanvas({ pane: 'water', padding: 1 });
   const water = L.geoJSON(undefined, {
-    pane: 'water',
     interactive: false,
     // the sea is closed along the data's bbox, so its outline is drawn separately, skipping those edges
     style: f => ({ renderer, color: COAST_HEX, weight: 1, opacity: 1, fillColor: WATER_HEX, fillOpacity: 1, stroke: f?.properties.kind !== 'sea' }),
@@ -237,10 +235,13 @@ export function terrainLayer(): L.LayerGroup {
       }
     })
     .catch(err => {
-      // offline before the chunk arrived, or a stale page after a redeploy: the Bay would read as land
-      console.warn('water polygons failed to load', err);
+      // offline before the chunk arrived, or a stale page after a redeploy: the tiles draw the sea instead
+      console.warn('water polygons failed to load; drawing the sea from the terrain', err);
+      waterMissing = true;
+      cache.clear();
+      relief.redraw();
     });
-  return new TerrainGroup([new TerrainLayer(), water]);
+  return L.layerGroup([relief, water]);
 }
 
 /** The shoreline of a sea ring: its edges except the ones that run along the water data's bbox. */

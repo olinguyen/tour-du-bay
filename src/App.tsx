@@ -47,8 +47,6 @@ export default function App() {
   const openRide = useCallback((s: string) => navigate(s), [navigate]);
   const closeRide = useCallback(() => navigate(null), [navigate]);
 
-  /** ends a running preview; set once the flyover hook exists, used by callbacks declared before it */
-  const stopFly = useRef(() => {});
   const gm = useGuideMap(mapEl, {
     onHover: setHot,
     onOpen: openRide,
@@ -57,17 +55,17 @@ export default function App() {
       const f = side.current?.querySelector<HTMLElement>(`figure[data-i="${i}"]`);
       if (!f) return;
       if (live.current.mobile) {
-        // the story is under the map: close it (ending any preview) and scroll the page to the figure
-        stopFly.current();
+        // the story is under the map: close it and scroll the page to the figure
         setMapOpen(false);
         window.scrollTo({ top: f.getBoundingClientRect().top + window.scrollY - 24, behavior: scrollBehavior() });
       } else side.current!.scrollTo({ top: f.offsetTop - 24, behavior: scrollBehavior() });
     },
   }, ride);
   const { flying, toggle: toggleFlyover } = useFlyover(gm, ride, scrub);
-  stopFly.current = () => {
-    if (flying) toggleFlyover();
-  };
+  // the preview has nothing to play on once the phone's map layer is away, however it was closed
+  useEffect(() => {
+    if (isMobile && !mapOpen && flying) toggleFlyover();
+  }, [isMobile, mapOpen, flying, toggleFlyover]);
   const toggleFly = useCallback(() => {
     setPeek(false);
     // on a phone the preview plays on the map layer, so bring it up (remembering where the story was)
@@ -157,14 +155,11 @@ export default function App() {
   // ---- phone map layer
   const restoreScroll = useRef(false);
   const toggleMap = useCallback(() => {
-    const { mapOpen, flying } = live.current;
+    const { mapOpen } = live.current;
     if (!mapOpen) docScroll.current = window.scrollY;
-    else {
-      restoreScroll.current = true;
-      if (flying) toggleFlyover(); // the preview has nothing to play on once the map is away
-    }
+    else restoreScroll.current = true;
     setMapOpen(!mapOpen);
-  }, [toggleFlyover]);
+  }, []);
   useEffect(() => {
     if (!isMobile) setMapOpen(false);
   }, [isMobile]);

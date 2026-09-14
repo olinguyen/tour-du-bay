@@ -2,7 +2,7 @@
 // (+ optional waypoints/finish/hours).
 import type { RoutePoint } from '../data/routes.generated';
 import type { LatLng, Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
-import { cum, hav, segmentAt, simplify } from './geo';
+import { cum, hav, segmentAt, simplifyIndices } from './geo';
 
 const FT_PER_MI = 5280, KM_PER_MI = 1.609344, FT_PER_M = 3.28084;
 /** profile sample spacing (km) */
@@ -56,9 +56,10 @@ export function prepareRoute(points: RoutePoint[]): { route: LatLng[]; cum: numb
     i === 0 || i === n ? h : (samples[i - 1] + 2 * h + samples[i + 1]) / 4,
   ]);
   // what the map draws: BRouter's every-few-metres vertices are far below what zoom 14 (~7 m/px) can show, and the
-  // preview re-projects the line every frame. The profile above keeps the full data.
-  const route = simplify(full, DRAW_TOLERANCE_M);
-  return { route, cum: cum(route), profile };
+  // preview re-projects the line every frame. The profile above keeps the full data, and the drawn vertices keep
+  // their road distances so a fraction of the ride lands on the same spot on the map and the profile.
+  const keep = simplifyIndices(full, DRAW_TOLERANCE_M);
+  return { route: keep.map(i => full[i]), cum: keep.map(i => fullCum[i]), profile };
 }
 
 /**
@@ -196,9 +197,11 @@ export function waypoints(r: Ride, tol = 0.05): Waypoint[] {
   for (const w of c) {
     const l = out[out.length - 1];
     if (l && w.f - l.f < tol) {
+      // the better-named candidate wins, position included (a short climb's top would otherwise sit at its foot)
       if (w.pr > l.pr) {
         l.name = w.name;
         l.pr = w.pr;
+        l.f = w.f;
       }
       if (w.f === 1) l.f = 1;
       continue;

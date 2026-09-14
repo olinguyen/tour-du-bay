@@ -54,8 +54,7 @@ additionally rejects responses with extra or multipart geometry and any way tagg
   water and a tunnel climbs over its hill.
 - **Climbing is estimated.** `guide.ts` samples the profile every ~25 m, smooths it with a short 1-2-1 window,
   and counts gain with 10 m hysteresis (a reversal smaller than 10 m is noise, not a climb). Figures will differ
-  from a GPS unit or another service; the stated `miles` in `rides.ts` is kept only as a sanity check on the
-  plan, and the development build warns when the two disagree by more than 15%.
+  from a GPS unit or another service.
 - **Distance is measured** from the route geometry and shown in whole miles.
 
 The generated file records, per ride, the service, profile, preparation date and every via point, plus each

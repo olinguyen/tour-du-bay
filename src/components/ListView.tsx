@@ -22,7 +22,8 @@ const plural = (n: number) => `${n} ride${n === 1 ? '' : 's'}`;
 /** rides in panel order: grouped by region, sorted within. Arrows, prev/next and the pager all follow this. */
 export function sequence(area: Area | null, sort: Sort): Ride[] {
   const areas = area ? [area] : AREAS;
-  return areas.flatMap(a => ridesIn(a).sort((x, y) => (x[sort.key] - y[sort.key]) * sort.dir));
+  const by = (r: Ride) => (sort.key === 'miles' ? r.lengthMi : r.feet);
+  return areas.flatMap(a => ridesIn(a).sort((x, y) => (by(x) - by(y)) * sort.dir));
 }
 
 interface Props {

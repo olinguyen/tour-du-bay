@@ -113,7 +113,7 @@ describe('legs', () => {
   it('has one leg per pair of waypoints, covering the whole distance', () => {
     const card = legs(ride);
     expect(card.legs).toHaveLength(card.wp.length - 1);
-    expect(card.legs.reduce((s, l) => s + l.mi, 0)).toBeCloseTo(ride.miles, 9);
+    expect(card.legs.reduce((s, l) => s + l.mi, 0)).toBeCloseTo(ride.lengthMi, 9);
     expect(card.legs.every(l => l.mi > 0 && l.t > 0)).toBe(true);
   });
   it('calibrates gain and time to the stated feet and hours', () => {

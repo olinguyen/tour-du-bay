@@ -190,7 +190,7 @@ img.ph{display:block;width:100%;object-fit:cover;padding:0}
 .sr-only,.pf-range{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .skip{position:absolute;left:-999px;top:8px;z-index:2000;background:var(--page);color:var(--ink);padding:8px 12px;border:1px solid var(--ink);font:500 12px var(--sans);letter-spacing:.08em;text-transform:uppercase}
 .skip:focus{left:16px}
-html.phide .skip{display:none} /* the panel is inert while hidden; the toggle is the first stop then */
+html.phide .skip,body.map-open .skip{display:none} /* the panel is inert while hidden or under the phone map */
 #side:focus{outline:none}
 h2.grp-hd{margin:0;font:inherit}
 .row .thumb,.row-sub{display:block}

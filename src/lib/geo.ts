@@ -75,9 +75,9 @@ export function bounds(routes: LatLng[][]): [LatLng, LatLng] {
   return [[s, w], [n, e]];
 }
 
-/** Douglas-Peucker: the vertices of a route that keep every point within `metres` of the simplified line */
-export function simplify(route: LatLng[], metres: number): LatLng[] {
-  if (route.length < 3) return route;
+/** Douglas-Peucker: the indices of the vertices that keep every point within `metres` of the simplified line */
+export function simplifyIndices(route: LatLng[], metres: number): number[] {
+  if (route.length < 3) return route.map((_, i) => i);
   // planar metres, good enough for tolerances of a few metres
   const k = Math.cos(rad(route[0][0])) * 111320, m = 111320;
   const keep = new Uint8Array(route.length);
@@ -99,5 +99,9 @@ export function simplify(route: LatLng[], metres: number): LatLng[] {
       stack.push([a, far], [far, b]);
     }
   }
-  return route.filter((_, i) => keep[i]);
+  const out: number[] = [];
+  for (let i = 0; i < route.length; i++) if (keep[i]) out.push(i);
+  return out;
 }
+
+export const simplify = (route: LatLng[], metres: number): LatLng[] => simplifyIndices(route, metres).map(i => route[i]);
