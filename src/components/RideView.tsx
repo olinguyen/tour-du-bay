@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { RIDES, ridesIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
-import { areaSlug, fmt, hm, legs, pad2, place, roman } from '../lib/route';
+import { areaSlug, fmt, hm, legs, miles, pad2, place, roman } from '../lib/route';
 import { useStore, type Scrub, type Store } from '../lib/store';
 import { ProfileChart, scrubParts } from './ProfileChart';
 
@@ -61,7 +61,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         data-i={i}
         className={hotPhoto === i ? 'hot' : undefined}
         tabIndex={0}
-        aria-label={`Photo ${i + 1}: ${ph.cap}, ${(ph.f * r.lengthMi).toFixed(1)} miles in`}
+        aria-label={`Photo ${i + 1}: ${ph.cap}, ${miles(ph.f * r.lengthMi)} miles in`}
         onMouseEnter={enter}
         onMouseLeave={leave}
         onFocus={enter}
@@ -71,7 +71,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           <img className="ph" src={ph.src} alt={ph.cap} loading="lazy" />
         ) : (
           <div className="ph" aria-hidden="true">
-            <b>photo · {(ph.f * r.lengthMi).toFixed(1)} mi in</b>
+            <b>photo · {miles(ph.f * r.lengthMi)} mi in</b>
           </div>
         )}
         <figcaption>
@@ -102,7 +102,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         <b>{r.start}</b>
       </p>
       <div className="facts">
-        <div><b>{r.miles}</b><span className="mono">miles</span></div>
+        <div><b>{miles(r.lengthMi)}</b><span className="mono">miles</span></div>
         <div><b>{fmt(r.feet)}</b><span className="mono">ft of climbing</span></div>
         <div><b>{r.hours.replace(/\s*h$/, '')}</b><span className="mono">hours riding</span></div>
         <div><b>{fmt(Math.round(r.maxElev / 10) * 10)}</b><span className="mono">ft high point</span></div>
@@ -116,7 +116,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         <ProfileChart ride={r} card={card} leg={leg} scrub={scrub} onScrub={onScrub} />
         <div className="pf-ends mono">
           <span>{from}</span>
-          <span>{r.miles} mi · {r.finish ? place(r.finish) : `back to ${from}`}</span>
+          <span>{miles(r.lengthMi)} mi · {r.finish ? place(r.finish) : `back to ${from}`}</span>
         </div>
         <button className={'preview' + (flying ? ' on' : '')} id="fly" onClick={onToggleFly}>
           <i aria-hidden="true" />
@@ -140,7 +140,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         </summary>
         <ol>
           {card.legs.map((l, i) => {
-            const mi = l.mi.toFixed(1), gain = fmt(Math.round(l.gain / 10) * 10), t = hm(l.t);
+            const dist = miles(l.mi), gain = fmt(Math.round(l.gain / 10) * 10), t = hm(l.t);
             // hover lives on the li so its padding highlights the same as its CSS :hover does
             return (
               <li
@@ -153,7 +153,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
                 <button
                   type="button"
                   className="leg"
-                  aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${mi} miles, +${gain} feet, ${t}`}
+                  aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${dist} miles, +${gain} feet, ${t}`}
                   onFocus={() => onLeg(l)}
                   onBlur={() => onLeg(null)}
                   onClick={() => scrubTo({ f: l.b, soft: false })}
@@ -163,7 +163,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
                     {l.from} <em>→</em> {l.to}
                   </span>
                   <span className="st">
-                    <span>{mi}<i> mi</i></span>
+                    <span>{dist}<i> mi</i></span>
                     <span>
                       +{gain}<i> ft</i>
                       <s>−{fmt(Math.round(l.loss / 10) * 10)}</s>
@@ -178,7 +178,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
             <b />
             <span className="lg">{card.loop ? 'Round trip' : 'Point to point'}</span>
             <span className="st">
-              <span>{r.lengthMi.toFixed(1)}<i> mi</i></span>
+              <span>{miles(r.lengthMi)}<i> mi</i></span>
               <span>+{fmt(r.feet)}<i> ft</i></span>
               <span>{hm(card.hours)}</span>
             </span>
@@ -203,7 +203,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           {near.map(x => (
             <button key={x.slug} onClick={() => onOpen(x.slug)}>
               {x.name}
-              <span>{x.miles} mi · {fmt(x.feet)} ft</span>
+              <span>{miles(x.lengthMi)} mi · {fmt(x.feet)} ft</span>
             </button>
           ))}
         </div>

@@ -37,7 +37,6 @@ export function makeRide(over: Partial<Ride> = {}): Ride {
     name: 'Test Loop',
     area: 'Marin',
     start: 'Fairfax, the Parkade',
-    miles: 10,
     lengthMi: 10,
     feet: SUMMIT_FT - 200,
     hours: '1½–2 h',

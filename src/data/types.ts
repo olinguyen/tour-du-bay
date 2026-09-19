@@ -44,9 +44,7 @@ export interface Ride extends RideInput {
   cum: number[];
   /** [miles, feet] sampled every ~25 m and lightly smoothed */
   profile: ProfilePoint[];
-  /** measured route length, whole miles for the headline figures */
-  miles: number;
-  /** measured route length, exact, for positions along the route */
+  /** measured route length in miles; every figure the guide shows is this one, to a tenth (`miles` in lib/route) */
   lengthMi: number;
   /** climbing from the terrain profile, ignoring reversals under 10 m */
   feet: number;

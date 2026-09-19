@@ -4,7 +4,7 @@ import { LABELS, RIDES, ridesIn } from '../data/guide';
 import type { Area, LatLng, Leg, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion } from '../lib/html';
-import { areaSlug, climbs, fmt, pad2 } from '../lib/route';
+import { areaSlug, climbs, fmt, miles, pad2 } from '../lib/route';
 import { lazySvg } from './lazyRenderer';
 import { addLabels, terrainLayer } from './terrain';
 
@@ -32,7 +32,7 @@ interface RideLayers {
 }
 
 const tipHtml = (r: Ride) =>
-  `<span>${esc(r.name)}</span><small>${esc(`${r.area} · ${r.miles} mi · ${fmt(r.feet)} ft${r.transit ? ' · ' + r.transit : ''}`)}</small>`;
+  `<span>${esc(r.name)}</span><small>${esc(`${r.area} · ${miles(r.lengthMi)} mi · ${fmt(r.feet)} ft${r.transit ? ' · ' + r.transit : ''}`)}</small>`;
 
 export class GuideMap {
   private readonly events: GuideMapEvents;
@@ -199,7 +199,7 @@ export class GuideMap {
       });
       m.on('add', () => m.getElement()?.setAttribute('aria-label', `Photo ${i + 1}: ${ph.cap}`));
       m.addTo(this.pinGroup);
-      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${(ph.f * ride.lengthMi).toFixed(1)} mi in</small>`, {
+      m.bindTooltip(`<span>${esc(ph.cap)}</span><small>${miles(ph.f * ride.lengthMi)} mi in</small>`, {
         className: 'ride-tip',
         direction: 'top',
         offset: [0, -30],

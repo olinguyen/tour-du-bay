@@ -14,7 +14,7 @@ export const RIDES: Ride[] = RIDE_INPUTS.map((r, i) => {
   const lengthMi = profile[profile.length - 1][0];
   let maxElev = -Infinity;
   for (const p of profile) if (p[1] > maxElev) maxElev = p[1];
-  return { ...r, route, cum, profile, lengthMi, miles: Math.round(lengthMi), feet: Math.round(elevationGain(profile)), maxElev, num: i + 1 };
+  return { ...r, route, cum, profile, lengthMi, feet: Math.round(elevationGain(profile)), maxElev, num: i + 1 };
 });
 
 const BY_SLUG = new Map(RIDES.map(r => [r.slug, r]));

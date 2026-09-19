@@ -5,7 +5,7 @@ import { findRide } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
 import { useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
 import { scrollBehavior } from './lib/html';
-import { fmt } from './lib/route';
+import { fmt, miles } from './lib/route';
 import { createStore, type Scrub } from './lib/store';
 
 const TITLE = document.title;
@@ -321,7 +321,7 @@ export default function App() {
         <div className="mapchip" aria-hidden={!ride}>
           <button id="chip-back" tabIndex={ride ? 0 : -1} onClick={closeRide}>← All</button>
           <span>{chipRide.current?.name}</span>
-          <small>{chipRide.current && `${chipRide.current.miles} mi · ${fmt(chipRide.current.feet)} ft`}</small>
+          <small>{chipRide.current && `${miles(chipRide.current.lengthMi)} mi · ${fmt(chipRide.current.feet)} ft`}</small>
           {flying && (
             <button className="chip-stop" ref={chipStop} onClick={toggleFly}>Stop preview</button>
           )}

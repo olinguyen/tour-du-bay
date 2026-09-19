@@ -1,12 +1,34 @@
 import { describe, expect, it } from 'vitest';
+import type { RoutePoint } from '../data/routes.generated';
 import type { ProfilePoint } from '../data/types';
 import {
-  areaSlug, climbs, elevAt, fmt, gradeAt, highPoint, hm, hoursOf, legs, pad2, place, roman, steepDescents, waypoints,
+  areaSlug, climbSeries, climbs, elevAt, elevationGain, fmt, gradeAt, highPoint, hm, hoursOf, legs, miles, pad2, place,
+  prepareRoute, roman, steepDescents, waypoints,
 } from './route';
 import { CLIMB, PROFILE, SUMMIT_FT, makeRide } from './testRide';
 
 const FLAT: ProfilePoint[] = [[0, 100], [1, 100], [2, 100], [3, 100]];
 const ride = makeRide();
+
+/** half-mile samples of a hand-written list of heights */
+const profileOf = (heights: number[]): ProfilePoint[] => heights.map((h, i) => [i / 2, h]);
+
+/** the synthetic ride closed into a loop: the same climb, then a steady descent back to the height it started at */
+const LOOP: ProfilePoint[] = Array.from({ length: 21 }, (_, i): ProfilePoint => {
+  const d = i / 2;
+  if (d <= 2) return [d, 200];
+  if (d <= 4) return [d, 200 + 0.07 * (d - 2) * 5280];
+  if (d <= 6) return [d, SUMMIT_FT];
+  return [d, SUMMIT_FT - ((SUMMIT_FT - 200) * (d - 6)) / 4];
+});
+
+/** a triangle back to where it began, whose closing point the router read 40 ft above the opening one */
+const TRIANGLE: RoutePoint[] = [
+  [37.8, -122.42, 100],
+  [37.81, -122.42, 300],
+  [37.81, -122.41, 250],
+  [37.8, -122.42, 140],
+];
 
 describe('formatters', () => {
   it('format times, numerals and names', () => {
@@ -18,6 +40,48 @@ describe('formatters', () => {
     expect(place('Fairfax, the Parkade')).toBe('Fairfax');
     expect(areaSlug('East Bay')).toBe('east-bay');
     expect(fmt(4900)).toBe('4,900');
+    expect(miles(19.848)).toBe('19.8');
+    expect(miles(17)).toBe('17.0');
+  });
+});
+
+describe('climbSeries', () => {
+  it('counts the climbs and descents, ignoring reversals under the threshold', () => {
+    const { gain, loss } = climbSeries(profileOf([100, 120, 500, 480, 600, 100]));
+    expect(gain[5]).toBe(500); // the 20 ft wobbles either side of 500 are terrain-model noise, not a climb
+    expect(loss[5]).toBe(500);
+  });
+  it('leaves gain and loss differing by exactly the net change in height', () => {
+    // each profile ends part-way through a move the hysteresis was still waiting on, or starts with one
+    for (const hs of [[100, 500, 480], [100, 80, 500], [100, 500, 100, 130], [100, 120, 90]]) {
+      const p = profileOf(hs), { gain, loss } = climbSeries(p), i = p.length - 1;
+      expect(gain[i] - loss[i]).toBeCloseTo(hs[i] - hs[0], 9);
+    }
+  });
+  it('descends as much as it climbs on a profile that ends where it started', () => {
+    const { gain, loss } = climbSeries(LOOP), i = LOOP.length - 1;
+    expect(gain[i]).toBeCloseTo(SUMMIT_FT - 200, 9);
+    expect(loss[i]).toBeCloseTo(gain[i], 9);
+  });
+  it('accumulates without ever going backwards', () => {
+    const { gain, loss } = climbSeries(PROFILE);
+    for (let i = 1; i < PROFILE.length; i++) {
+      expect(gain[i]).toBeGreaterThanOrEqual(gain[i - 1]);
+      expect(loss[i]).toBeGreaterThanOrEqual(loss[i - 1]);
+    }
+  });
+});
+
+describe('prepareRoute', () => {
+  it('gives a route that returns to its start one height there, not two', () => {
+    const { profile } = prepareRoute(TRIANGLE);
+    expect(profile[0][1]).toBe(100);
+    expect(profile[profile.length - 1][1]).toBe(100);
+    expect(elevationGain(profile)).toBeCloseTo(climbSeries(profile).loss[profile.length - 1], 9);
+  });
+  it('leaves a point-to-point route ending where the router put it', () => {
+    const { profile } = prepareRoute(TRIANGLE.slice(0, 3));
+    expect(profile[profile.length - 1][1]).toBe(250);
   });
 });
 
@@ -121,6 +185,12 @@ describe('legs', () => {
     expect(card.legs.reduce((s, l) => s + l.gain, 0)).toBeCloseTo(ride.feet, 6);
     expect(card.legs.reduce((s, l) => s + l.t, 0)).toBeCloseTo(1.75, 6);
     expect(card.hours).toBe(1.75);
+  });
+  it('descends what it climbs on a loop, so both columns add up to the headline', () => {
+    const loop = makeRide({ profile: LOOP, feet: SUMMIT_FT - 200 });
+    const card = legs(loop);
+    expect(card.legs.reduce((s, l) => s + l.gain, 0)).toBeCloseTo(loop.feet, 6);
+    expect(card.legs.reduce((s, l) => s + l.loss, 0)).toBeCloseTo(loop.feet, 6);
   });
   it('is a loop without a finish, and not with one', () => {
     expect(legs(ride).loop).toBe(true);

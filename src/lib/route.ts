@@ -9,9 +9,13 @@ const FT_PER_MI = 5280, KM_PER_MI = 1.609344, FT_PER_M = 3.28084;
 const SAMPLE_KM = 0.025;
 /** how far the drawn route may stray from the planned one (m) */
 const DRAW_TOLERANCE_M = 3;
+/** how near a route's last point must come to its first for the route to count as returning there (km) */
+const CLOSES_WITHIN_KM = 0.005;
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');
+/** a distance in miles, to a tenth: the guide measures its routes, so every figure it shows is the measured one */
+export const miles = (n: number) => n.toFixed(1);
 export const place = (s: string) => s.split(',')[0];
 export const pad2 = (n: number) => String(n).padStart(2, '0');
 export const roman = (n: number) =>
@@ -48,8 +52,12 @@ export function prepareRoute(points: RoutePoint[]): { route: LatLng[]; cum: numb
   const full: LatLng[] = pts.map(p => [p[0], p[1]]);
   // the terrain model dips a foot or two below sea level along the shore; the guide never shows a negative height
   const fullCum = cum(full), heights = pts.map(p => Math.max(0, p[2]));
+  // a loop ends where it began, and one spot has one height: the router reads the closing node a few feet off the
+  // opening one often enough, and left alone that gap is what stops a loop's descending from matching its climbing
+  if (hav(full[0], full[full.length - 1]) < CLOSES_WITHIN_KM) heights[heights.length - 1] = heights[0];
   const span = fullCum[fullCum.length - 1], n = Math.max(1, Math.ceil(span / SAMPLE_KM));
-  const at = (i: number) => (span * i) / n;
+  // the last sample lands exactly at the end of the route, not a rounding error short of it
+  const at = (i: number) => (i === n ? span : (span * i) / n);
   const samples = Array.from({ length: n + 1 }, (_, i) => heightAt(fullCum, heights, at(i)));
   const profile: ProfilePoint[] = samples.map((h, i) => [
     at(i) / KM_PER_MI,
@@ -66,11 +74,13 @@ export function prepareRoute(points: RoutePoint[]): { route: LatLng[]; cum: numb
  * Cumulative climbing and descending (ft) at each profile point, with hysteresis: a reversal smaller than the
  * threshold (10 m) is terrain-model noise, not a climb; once a climb or descent is established it is counted from its
  * valley or peak, not from where it crossed the threshold. The legs read differences of these, so they always add up
- * to the totals.
+ * to the totals. Erasing the noise never loses height, either: the first move is measured from where the ride began
+ * and the last from where it ended, so the two totals differ by exactly the ride's net elevation change — by nothing
+ * at all on a loop, whose legs therefore descend as much as they climb.
  */
 export function climbSeries(p: ProfilePoint[], thresholdFt = 10 * FT_PER_M): { gain: number[]; loss: number[] } {
-  const gain = [0], loss = [0];
-  let lo = p[0][1], hi = lo, dir: -1 | 0 | 1 = 0, g = 0, l = 0;
+  const gain = [0], loss = [0], start = p[0][1];
+  let lo = start, hi = start, dir: -1 | 0 | 1 = 0, g = 0, l = 0;
   for (let i = 1; i < p.length; i++) {
     const h = p[i][1];
     if (dir === 1) {
@@ -82,12 +92,18 @@ export function climbSeries(p: ProfilePoint[], thresholdFt = 10 * FT_PER_M): { g
     } else {
       lo = Math.min(lo, h);
       hi = Math.max(hi, h);
-      if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - lo);
-      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += hi - h);
+      // the first move is measured from the ride's own starting height, not from the noise it wandered through first
+      if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - start);
+      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += start - h);
     }
     gain.push(g);
     loss.push(l);
   }
+  // the ride stops mid-climb or mid-descent, short of the peak or valley the hysteresis was still waiting for; that
+  // last stretch counts as well, and counting it is what leaves gain - loss equal to the net change in height
+  const drift = p[p.length - 1][1] - start - (g - l);
+  if (drift > 0) gain[gain.length - 1] += drift;
+  else loss[loss.length - 1] -= drift;
   return { gain, loss };
 }
 

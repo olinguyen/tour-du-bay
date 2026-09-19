@@ -3,7 +3,7 @@ import { AREAS, RIDES, ridesIn } from '../data/guide';
 import type { Area, Ride } from '../data/types';
 import { scrollBehavior } from '../lib/html';
 import { outline } from '../lib/profileChart';
-import { areaSlug, fmt, pad2, place } from '../lib/route';
+import { areaSlug, fmt, miles, pad2, place } from '../lib/route';
 import { Sparkline } from './ProfileChart';
 
 export type SortKey = 'miles' | 'feet';
@@ -155,7 +155,7 @@ const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
   return (
     <>
       <span className="sr-only" id={desc}>
-        {r.area} · {r.miles} miles · {fmt(r.feet)} feet of climbing · {hours} hours · starts at {place(r.start)}
+        {r.area} · {miles(r.lengthMi)} miles · {fmt(r.feet)} feet of climbing · {hours} hours · starts at {place(r.start)}
       </span>
       <button
         className={'row' + (hot ? ' hot' : '')}
@@ -179,7 +179,7 @@ const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
         <span>
           <span className="name">{r.name}</span>
           <span className="stats" aria-hidden="true">
-            <span>{r.miles} mi</span>
+            <span>{miles(r.lengthMi)} mi</span>
             <i>·</i>
             <span>{fmt(r.feet)} ft</span>
             <i>·</i>
