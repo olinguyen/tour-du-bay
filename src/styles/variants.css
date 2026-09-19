@@ -90,12 +90,4 @@ html.float .legend,html.float .mapchip,html.float .leaflet-bottom.leaflet-left{t
   html.float #r-name{font-size:46px}
   html.float .facts b{font-size:38px}
 }
-/* ---- phones (≤700px): the panel is the document; no floating, no hide tab (the toggle in app.css swaps layers) ---- */
-@media (max-width:700px){
-  html.float{--panel-w:0px}
-  html.float #side,html.float.phide #side{position:static;width:auto;max-height:none;border-radius:0;box-shadow:none;transform:none;opacity:1;pointer-events:auto;transition:none}
-  html.float .view{padding:28px 22px 120px}
-  html.float .ptab,html.float.phide .ptab{display:none}
-  html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
-  html.float .leaflet-bottom.leaflet-left,html.float.phide .leaflet-bottom.leaflet-left{left:0}
-}
+/* The phone layout (≤700px) undoes all of the above; it is written once, with the rest of the phone rules, in app.css. */

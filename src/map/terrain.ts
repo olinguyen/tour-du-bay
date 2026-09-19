@@ -1,6 +1,7 @@
 // Terrain: shades public-domain elevation tiles into the site's own palette, per tile, on canvas; water is a vector
 // overlay from OpenStreetMap (src/data/bay-water.json, built by scripts/fetch-water.mjs) drawn under the routes.
 import L from 'leaflet';
+import MAP_BOUNDS from '../data/map-bounds.json';
 import type { MapLabel } from '../data/types';
 import { esc } from '../lib/html';
 import { lazyCanvas } from './lazyRenderer';
@@ -9,13 +10,15 @@ import { lazyCanvas } from './lazyRenderer';
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const ATTRIBUTION =
   'Terrain: USGS 3DEP/SRTM &amp; NOAA ETOPO1 via AWS Terrain Tiles · Water © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-/** the extent of src/data/bay-water.json (the bbox scripts/fetch-water.mjs fetches; matches GuideMap's MAX_BOUNDS) */
-const WATER = { s: 36.95, w: -123.3, n: 38.45, e: -121.15 };
+/** the extent of src/data/bay-water.json: the map's bounds, until the file arrives carrying the bbox it was built to */
+let WATER = { s: MAP_BOUNDS.s, w: MAP_BOUNDS.w, n: MAP_BOUNDS.n, e: MAP_BOUNDS.e };
 
 const rgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
-const GROUND_HEX = '#ece3cf';
+/** a colour from the stylesheet's palette (guide.css :root), so the canvas and the CSS cannot drift apart */
+const swatch = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const GROUND_HEX = swatch('--ground');
 const GROUND = rgb(GROUND_HEX), TINT = rgb('#6b4f33');
-const WATER_HEX = '#c6d2cb', COAST_HEX = '#8b8574';
+const WATER_HEX = swatch('--water'), COAST_HEX = swatch('--coast');
 const STRENGTH = 1.45;
 const SIZE = 256;
 /** sun from the north-west, fairly high */
@@ -228,6 +231,14 @@ export function terrainLayer(map: L.Map): L.LayerGroup {
   import('../data/bay-water.json')
     .then(m => {
       const fc = m.default as GeoJSON.FeatureCollection<GeoJSON.Polygon, { kind: string }>;
+      // the file states the bbox it was built to; if the map has since been widened past it, the tiles shaded so far
+      // guessed the sea's edge from the wrong extent, so they have to be drawn again
+      const b = fc.bbox;
+      if (b && (b[0] !== WATER.w || b[1] !== WATER.s || b[2] !== WATER.e || b[3] !== WATER.n)) {
+        WATER = { w: b[0], s: b[1], e: b[2], n: b[3] };
+        cache.clear();
+        relief.redraw();
+      }
       water.addData(fc);
       for (const f of fc.features) {
         if (f.properties.kind !== 'sea') continue;

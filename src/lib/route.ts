@@ -3,8 +3,8 @@
 import type { RoutePoint } from '../data/routes.generated';
 import type { LatLng, Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
 import { cum, hav, segmentAt, simplifyIndices } from './geo';
+import { FT_PER_M, FT_PER_MI, KM_PER_MI } from './units.mjs';
 
-const FT_PER_MI = 5280, KM_PER_MI = 1.609344, FT_PER_M = 3.28084;
 /** profile sample spacing (km) */
 const SAMPLE_KM = 0.025;
 /** how far the drawn route may stray from the planned one (m) */
