@@ -145,14 +145,18 @@ body.regions .pf-leg{stroke:var(--ac-hot)}
 .compass{position:absolute;top:24px;right:28px;z-index:500;pointer-events:none;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em}
 .compass::before{content:"";display:block;width:0;height:0;border:4.5px solid transparent;border-bottom:15px solid var(--label);border-top:0;margin:0 auto 5px}
 .compass::after{content:"";display:block;width:1px;height:18px;background:var(--label);margin:2px auto 0;opacity:.6}
-/* the reader's two standing choices, in one panel under the compass: how the map is drawn, and in what units */
-.mapctl{position:absolute;top:92px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink);overflow:hidden}
-.mapctl .seg{display:flex}
+/* the reader's two standing choices, as a key card under the compass: how the map is drawn, and in what units.
+   Built from the legend's vocabulary — paper, a hairline rule, an italic caption — so it reads as part of the map
+   rather than as app chrome; the chosen value is marked with a route-coloured underline, never a filled cell. */
+.mapctl{position:absolute;top:100px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
+.mapctl .seg{display:flex;align-items:baseline;gap:14px;padding:7px 13px 8px}
 .mapctl .seg+.seg{border-top:1px solid var(--rule)}
-.mapctl button{all:unset;cursor:pointer;flex:1;box-sizing:border-box;min-width:38px;text-align:center;padding:7px 10px 8px;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);transition:background .25s,color .25s}
-.mapctl button+button{border-left:1px solid var(--rule)}
+.mapctl .cap{flex:1;font:italic 400 14px/1 var(--serif);color:var(--ink-3)}
+.mapctl button{all:unset;position:relative;cursor:pointer;box-sizing:border-box;min-width:24px;text-align:center;padding:3px 0 5px;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);transition:color .25s}
+.mapctl button::after{content:"";position:absolute;left:0;right:0;top:calc(50% + 8px);height:1.5px;background:var(--route);opacity:0;transition:opacity .25s}
 .mapctl button:hover{color:var(--ink)}
-.mapctl button.on{background:var(--ink);color:var(--page)}
+.mapctl button.on{color:var(--ink)}
+.mapctl button.on::after{opacity:1}
 .legend{position:absolute;left:28px;bottom:32px;z-index:500;pointer-events:none;color:var(--label);font:italic 400 16px/1.55 var(--serif);transition:opacity .4s}
 .legend i{display:inline-block;width:26px;height:0;border-top:2.5px solid var(--route);vertical-align:middle;margin-right:10px;border-radius:2px}
 .legend b{display:inline-block;width:13px;height:13px;background:var(--page);border:1px solid var(--ink);border-radius:50%;vertical-align:-2px;margin-right:10px}
@@ -227,7 +231,8 @@ h2.grp-hd{margin:0;font:inherit}
   html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
   html.float .maplibregl-ctrl-bottom-left,html.float.phide .maplibregl-ctrl-bottom-left{left:0}
   .mapctl{top:auto;right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}
-  .mapctl button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px}
+  .mapctl .seg{padding:0 14px;gap:14px;align-items:center}
+  .mapctl button{min-height:44px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;padding:0}
   /* the chip is the way back to the list from the map: give its buttons a full tap target */
   .mapchip{top:16px;right:16px;max-width:none;white-space:normal;flex-wrap:wrap;align-items:center;gap:0 12px;padding:4px 14px 4px 4px}
   .mapchip button{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}

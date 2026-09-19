@@ -324,7 +324,8 @@ export default function App() {
         <div id="map" ref={mapEl} />
         <div className="compass" aria-hidden="true">N</div>
         <div className="mapctl">
-          <div className="seg" role="group" aria-label="Map perspective">
+          <div className="seg" role="group" aria-label="Map view">
+            <span className="cap" aria-hidden="true">view</span>
             {(['2d', '3d'] as const).map(m => (
               <button
                 key={m}
@@ -338,6 +339,7 @@ export default function App() {
             ))}
           </div>
           <div className="seg" role="group" aria-label="Units">
+            <span className="cap" aria-hidden="true">units</span>
             {([['imperial', 'mi'], ['metric', 'km']] as [Unit, string][]).map(([k, label]) => (
               <button
                 key={k}
