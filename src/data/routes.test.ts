@@ -7,10 +7,10 @@ import planned from '../../scripts/route-data.json?raw';
 import { annotations, outline, profileScale } from '../lib/profileChart';
 import { prepareRoute, type RoutePoint } from '../lib/prepare';
 import { climbs, elevationGain, hm, legs, steepDescents } from '../lib/route';
+import { KM_PER_MI } from '../lib/units.mjs';
 import { RIDES } from './guide';
 import type { ProfilePoint, Ride } from './types';
 
-const KM_PER_MI = 1.609344;
 const PAD = { l: 34, r: 12, t: 18, b: 22 };
 
 /**

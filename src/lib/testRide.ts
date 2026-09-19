@@ -2,8 +2,7 @@
 // (and of how the real profiles are generated) so the tests only exercise the lib functions.
 import type { LatLng, ProfilePoint, Ride } from '../data/types';
 import { cum } from './geo';
-
-const FT_PER_MI = 5280;
+import { FT_PER_MI } from './units.mjs';
 
 /** the climb's start and end as fractions of the route */
 export const CLIMB = { a: 0.2, b: 0.4 };

@@ -2,8 +2,7 @@
 // The profile itself is prepared offline, see src/lib/prepare.ts.
 import type { Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
 import { segmentAt } from './geo';
-
-const FT_PER_MI = 5280, FT_PER_M = 3.28084;
+import { FT_PER_M, FT_PER_MI } from './units.mjs';
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');

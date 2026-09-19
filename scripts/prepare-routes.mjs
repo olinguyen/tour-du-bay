@@ -19,10 +19,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { prepareCollection } from '../src/lib/prepare.ts';
+import { FT_PER_M, M_PER_MI } from '../src/lib/units.mjs';
 
 const endpoint = 'https://brouter.de/brouter';
 const alternativeIndex = 0;
-const FT_PER_M = 3.28084;
 /** consecutive parts must meet within this many metres; a route must begin this close to its named start */
 const JOIN_M = 30, START_M = 150;
 
@@ -122,7 +122,7 @@ export async function prepareRoutes({
       checkpoint.segments[id] = part;
       // Only this private checkpoint may be incomplete or have disconnected joins.
       await atomicWrite(checkpointPath, `${JSON.stringify(checkpoint)}\n`, files);
-      log.log(`${id}: ${part.coordinates.length} points, ${(part.distanceMeters / 1609.344).toFixed(1)} mi`);
+      log.log(`${id}: ${part.coordinates.length} points, ${(part.distanceMeters / M_PER_MI).toFixed(1)} mi`);
       await pause(1100);
     }
     // Role is editorial metadata; updating it does not change routing provenance.

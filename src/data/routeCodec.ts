@@ -10,6 +10,7 @@
 // The scales are chosen so nothing on screen moves. 1e-5 degrees is a ~1.1 m grid, well under a pixel at the
 // zoom the map reaches (~7 m/px at 14); a decimetre of road distance and a hundredth of a foot of elevation
 // are both far below the 10 m hysteresis that decides what counts as a climb.
+import { KM_PER_MI } from '../lib/units.mjs';
 import type { LatLng, ProfilePoint } from './types';
 
 /** degrees → integer grid */
@@ -18,7 +19,6 @@ const COORD = 1e5;
 const CUM = 1e4;
 /** feet → hundredths of a foot */
 const ELE = 1e2;
-const KM_PER_MI = 1.609344;
 
 /** A route as the preparation leaves it: real numbers, before any of the rounding above. */
 export interface PreparedRoute {

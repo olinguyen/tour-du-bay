@@ -7,9 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { prepareRoutes, serializeModule } from './prepare-routes.mjs';
+import { FT_PER_M } from '../src/lib/units.mjs';
 
 const root = new URL('../', import.meta.url);
-const FT_PER_M = 3.28084;
 const noFetch = async () => { throw new Error('Unexpected routing request'); };
 const noWrite = async () => { throw new Error('Unexpected filesystem write'); };
 const quiet = { log() {}, warn() {} };
