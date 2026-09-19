@@ -1,13 +1,20 @@
-import { cum } from '../lib/geo';
-import { smoothProfile } from '../lib/route';
+// The ride collection as the app sees it: editorial inputs (rides.ts) joined to their planned, road-following
+// geometry (routes.generated.ts) and everything derived from it — route, profile, distance, climbing.
+import { elevationGain, prepareRoute } from '../lib/route';
 import { AREAS, RIDE_INPUTS } from './rides';
+import { ROUTES } from './routes.generated';
 import type { Area, Ride } from './types';
 
 export { AREAS, LABELS } from './rides';
 
 export const RIDES: Ride[] = RIDE_INPUTS.map((r, i) => {
-  const profile = smoothProfile(r.profileKeys);
-  return { ...r, profile, maxElev: Math.max(...profile.map(p => p[1])), cum: cum(r.route), num: i + 1 };
+  const planned = ROUTES[r.slug];
+  if (!planned) throw new Error(`${r.slug}: no planned route in routes.generated.ts (add it to scripts/route-plans.json and run npm run routes)`);
+  const { route, cum, profile } = prepareRoute(planned.points);
+  const lengthMi = profile[profile.length - 1][0];
+  let maxElev = -Infinity;
+  for (const p of profile) if (p[1] > maxElev) maxElev = p[1];
+  return { ...r, route, cum, profile, lengthMi, miles: Math.round(lengthMi), feet: Math.round(elevationGain(profile)), maxElev, num: i + 1 };
 });
 
 const BY_SLUG = new Map(RIDES.map(r => [r.slug, r]));

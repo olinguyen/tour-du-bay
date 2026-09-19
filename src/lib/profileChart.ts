@@ -11,15 +11,24 @@ export interface Pad {
 
 export type ProfileScale = ReturnType<typeof profileScale>;
 
+/** at most about two profile points per pixel of width: the rest can't be seen and only cost paint time */
+function drawable(pts: ProfilePoint[], W: number): ProfilePoint[] {
+  const step = Math.floor(pts.length / (2 * W));
+  if (step < 2) return pts;
+  const out = pts.filter((_, i) => i % step === 0);
+  if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+  return out;
+}
+
 export function profileScale(ride: Ride, W: number, H: number, P: Pad) {
-  const pts = ride.profile;
+  const pts = ride.profile, drawn = drawable(pts, W);
   const maxD = pts[pts.length - 1][0];
   const maxE = Math.ceil(ride.maxElev / 500) * 500 + (ride.maxElev < 800 ? 200 : 0);
   const X = (d: number) => P.l + (d / maxD) * (W - P.l - P.r);
   const Y = (e: number) => P.t + (1 - e / maxE) * (H - P.t - P.b);
   const path = (ps: ProfilePoint[]) =>
     ps.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' ');
-  const line = path(pts);
+  const line = path(drawn);
   const area = `${line} L${X(maxD).toFixed(1)} ${H - P.b} L${X(0)} ${H - P.b} Z`;
   /** fraction of the route under a client x coordinate */
   const fractionAt = (clientX: number, rect: DOMRect) =>
@@ -77,8 +86,11 @@ export function legPath(s: ProfileScale, leg: Leg): string {
 }
 
 /** A ride's route outline for a 96×68 thumbnail: lng scaled by cos(lat), fitted below the index label. */
-export function outline(route: LatLng[]) {
-  const W = 96, H = 68, P = 8, PT = 24, k = Math.cos((route[0][0] * Math.PI) / 180);
+export function outline(full: LatLng[]) {
+  const W = 96, H = 68, P = 8, PT = 24, k = Math.cos((full[0][0] * Math.PI) / 180);
+  // a thumbnail can't show more than a couple of hundred vertices
+  const stride = Math.floor(full.length / 200);
+  const route = stride < 2 ? full : full.filter((_, i) => i % stride === 0 || i === full.length - 1);
   const xs = route.map(p => p[1] * k), ys = route.map(p => p[0]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const sc = Math.min((W - 2 * P) / (x1 - x0), (H - PT - P) / (y1 - y0));
