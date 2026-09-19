@@ -1,14 +1,9 @@
-// Route analysis: preparing a planned route's geometry, then pure functions of the resulting profile
-// (+ optional waypoints/finish/hours).
-import type { RoutePoint } from '../data/routes.generated';
-import type { LatLng, Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
-import { cum, hav, segmentAt, simplifyIndices } from './geo';
+// Route analysis: pure functions of a ride's elevation profile (+ optional waypoints/finish/hours).
+// The profile itself is prepared offline, see src/lib/prepare.ts.
+import type { Leg, ProfilePoint, Ride, RouteCard, Waypoint } from '../data/types';
+import { segmentAt } from './geo';
 
-const FT_PER_MI = 5280, KM_PER_MI = 1.609344, FT_PER_M = 3.28084;
-/** profile sample spacing (km) */
-const SAMPLE_KM = 0.025;
-/** how far the drawn route may stray from the planned one (m) */
-const DRAW_TOLERANCE_M = 3;
+const FT_PER_MI = 5280, FT_PER_M = 3.28084;
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');
@@ -21,46 +16,6 @@ export const hm = (t: number) => {
   const m = Math.round(t * 60);
   return `${Math.floor(m / 60)}:${pad2(m % 60)}`;
 };
-
-/** height (ft) at distance d (km) along the points, linear between the two nearest by binary search */
-function heightAt(dist: number[], heights: number[], d: number): number {
-  const i = segmentAt(dist, d);
-  const t = Math.max(0, Math.min(1, (d - dist[i - 1]) / (dist[i] - dist[i - 1] || 1)));
-  return heights[i - 1] + (heights[i] - heights[i - 1]) * t;
-}
-
-/**
- * Prepare a planned route's [lat, lng, ft] points for the guide: drop the duplicate where two parts join, measure it,
- * and sample the elevation every ~25 m with a short 1-2-1 smoothing window so terrain-model noise is not counted as
- * hundreds of tiny climbs. The generator validates every point, so a bad one here is a broken file, not a data gap.
- */
-export function prepareRoute(points: RoutePoint[]): { route: LatLng[]; cum: number[]; profile: ProfilePoint[] } {
-  const pts: RoutePoint[] = [];
-  for (const p of points) {
-    if (!(Array.isArray(p) && p.length === 3 && p.every(Number.isFinite) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)) {
-      throw new Error(`invalid route point ${JSON.stringify(p)}`);
-    }
-    const l = pts[pts.length - 1];
-    if (l && hav([l[0], l[1]], [p[0], p[1]]) < 1e-5) continue;
-    pts.push(p);
-  }
-  if (pts.length < 2) throw new Error('route has no usable points');
-  const full: LatLng[] = pts.map(p => [p[0], p[1]]);
-  // the terrain model dips a foot or two below sea level along the shore; the guide never shows a negative height
-  const fullCum = cum(full), heights = pts.map(p => Math.max(0, p[2]));
-  const span = fullCum[fullCum.length - 1], n = Math.max(1, Math.ceil(span / SAMPLE_KM));
-  const at = (i: number) => (span * i) / n;
-  const samples = Array.from({ length: n + 1 }, (_, i) => heightAt(fullCum, heights, at(i)));
-  const profile: ProfilePoint[] = samples.map((h, i) => [
-    at(i) / KM_PER_MI,
-    i === 0 || i === n ? h : (samples[i - 1] + 2 * h + samples[i + 1]) / 4,
-  ]);
-  // what the map draws: BRouter's every-few-metres vertices are far below what zoom 14 (~7 m/px) can show, and the
-  // preview re-projects the line every frame. The profile above keeps the full data, and the drawn vertices keep
-  // their road distances so a fraction of the ride lands on the same spot on the map and the profile.
-  const keep = simplifyIndices(full, DRAW_TOLERANCE_M);
-  return { route: keep.map(i => full[i]), cum: keep.map(i => fullCum[i]), profile };
-}
 
 /**
  * Cumulative climbing and descending (ft) at each profile point, with hysteresis: a reversal smaller than the
