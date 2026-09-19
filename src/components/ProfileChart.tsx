@@ -1,7 +1,8 @@
 import { memo, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Leg, Ride, RouteCard } from '../data/types';
 import { annotations, legPath, profileScale, ticks, type ProfileScale } from '../lib/profileChart';
-import { elevAt, fmt, gradeAt, miles } from '../lib/route';
+import { elevAt, gradeAt } from '../lib/route';
+import { dist, distUnit, distWord, elev, elevUnit, elevWord, useUnits, type Unit } from '../lib/measure';
 import { useStore, type Scrub, type Store } from '../lib/store';
 
 export const Sparkline = memo(function Sparkline({ ride }: { ride: Ride }) {
@@ -19,17 +20,19 @@ const W = 416, H = 150, PAD = { l: 0, r: 0, t: 16, b: 16 };
 const STEPS = 1000, JUMP = 50;
 
 /** what the readout says at fraction f of the ride, as parts so the readout can bold the numbers */
-export function scrubParts(ride: Ride, f: number) {
+export function scrubParts(ride: Ride, f: number, u: Unit) {
   const g = gradeAt(ride.profile, f);
   return {
-    mi: miles(f * ride.lengthMi),
-    ft: fmt(Math.round(elevAt(ride.profile, f))),
+    mi: dist(f * ride.lengthMi, u),
+    ft: elev(elevAt(ride.profile, f), u),
     grade: `${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)}%`,
+    d: distUnit(u),
+    e: elevUnit(u),
   };
 }
-const scrubText = (ride: Ride, f: number) => {
-  const p = scrubParts(ride, f);
-  return `${p.mi} mi · ${p.ft} ft · ${p.grade}`;
+const scrubText = (ride: Ride, f: number, u: Unit) => {
+  const p = scrubParts(ride, f, u);
+  return `${p.mi} ${p.d} · ${p.ft} ${p.e} · ${p.grade}`;
 };
 
 interface Props {
@@ -42,8 +45,9 @@ interface Props {
 
 export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub, onScrub }: Props) {
   const s = useMemo(() => profileScale(ride, W, H, PAD), [ride]);
-  const tk = useMemo(() => ticks(s), [s]);
-  const an = useMemo(() => annotations(ride, s, card), [ride, s, card]);
+  const u = useUnits();
+  const tk = useMemo(() => ticks(s, u), [s, u]);
+  const an = useMemo(() => annotations(ride, s, card, u), [ride, s, card, u]);
   const move = (e: PointerEvent<SVGSVGElement>) => onScrub(s.fractionAt(e.clientX, e.currentTarget.getBoundingClientRect()));
 
   return (
@@ -53,7 +57,7 @@ export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub,
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`Elevation profile: ${miles(ride.lengthMi)} miles, high point ${Math.round(ride.maxElev)} ft`}
+        aria-label={`Elevation profile: ${dist(ride.lengthMi, u)} ${distWord(u)}, high point ${elev(ride.maxElev, u)} ${elevWord(u)}`}
         onPointerMove={move}
         onPointerDown={move}
         // a click on the chart shouldn't blur the keyboard scrubber (its blur hides the cursor the click just placed)
@@ -107,6 +111,7 @@ export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub,
 
 /** Keyboard access to the profile: a visually hidden slider that mirrors the scrub store. Focusing it shows the cursor, leaving hides it. */
 function Scrubber({ ride, scrub, onScrub }: Pick<Props, 'ride' | 'scrub' | 'onScrub'>) {
+  const u = useUnits();
   const [focused, setFocused] = useState(false);
   // only mirror the store while focused: the preview writes it every frame, and nobody reads an unfocused slider
   const v = useSyncExternalStore(scrub.subscribe, () => (focused ? scrub.get() : null));
@@ -130,7 +135,7 @@ function Scrubber({ ride, scrub, onScrub }: Pick<Props, 'ride' | 'scrub' | 'onSc
       step={1}
       value={Math.round(f * STEPS)}
       aria-label="Position along the route"
-      aria-valuetext={scrubText(ride, f)}
+      aria-valuetext={scrubText(ride, f, u)}
       onChange={e => onScrub(e.currentTarget.valueAsNumber / STEPS)} // React's onChange is the native input event
       onKeyDown={keys}
       onFocus={() => {

@@ -7,8 +7,9 @@ import { LABELS, RIDES, ridesIn } from '../data/guide';
 import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, MapLabel, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
-import { esc, reducedMotion } from '../lib/html';
-import { areaSlug, climbs, fmt, miles, pad2 } from '../lib/route';
+import { esc, reducedMotion, storage } from '../lib/html';
+import { areaSlug, climbs, pad2 } from '../lib/route';
+import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 
@@ -25,6 +26,10 @@ const TOGGLE_PX = 80;
 const PITCH = 42, TILT_MS = 900;
 
 export type Perspective = '2d' | '3d';
+
+const VIEW_KEY = 'tdb.perspective';
+/** The perspective the reader last chose. 2D is the default: the terrain mesh is a second set of tiles to fetch. */
+export const savedPerspective = (): Perspective => (storage.get(VIEW_KEY) === '3d' ? '3d' : '2d');
 
 export interface GuideMapEvents {
   onHover(slug: string | null): void;
@@ -45,8 +50,12 @@ const line = (route: LatLng[]): Feature<LineString> => ({
 const collection = (features: Feature[]): FeatureCollection => ({ type: 'FeatureCollection', features });
 const box = ([[s, w], [n, e]]: [LatLng, LatLng]): LngLatBoundsLike => [[w, s], [e, n]];
 
-const tipHtml = (r: Ride) =>
-  `<span>${esc(r.name)}</span><small>${esc(`${r.area} · ${miles(r.lengthMi)} mi · ${fmt(r.feet)} ft${r.transit ? ' · ' + r.transit : ''}`)}</small>`;
+/** read at hover time, so a tooltip opened after the units changed shows the units now in force */
+const tipHtml = (r: Ride) => {
+  const u = units.get();
+  const figures = `${r.area} · ${dist(r.lengthMi, u)} ${distUnit(u)} · ${elev(r.feet, u)} ${elevUnit(u)}${r.transit ? ' · ' + r.transit : ''}`;
+  return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
+};
 
 /** a zero-size wrapper so MapLibre's centring is a no-op and the inner element positions itself, as divIcon did */
 function marker(map: MlMap, at: LatLng, html: string, className = ''): Marker {
@@ -68,11 +77,12 @@ export class GuideMap {
   /** flyover timers, kept apart so starting a preview doesn't cancel the photo pins fading in */
   private readonly flyTimers = new Set<number>();
   private readonly tip: maplibregl.Popup;
+  private readonly unwatchUnits: () => void;
   private pins: Marker[] = [];
   private ride: Ride | null = null;
   private area: Area | null = null;
   private hot: string | null = null;
-  private perspective: Perspective = '2d';
+  private perspective: Perspective = savedPerspective();
   /** the perspective a running preview tilted away from, restored when it ends; null when no preview owns it */
   private beforeFlyover: Perspective | null = null;
   /** the ride line is dimmed under the preview's progress line; stays set while a finished preview lingers */
@@ -96,6 +106,7 @@ export class GuideMap {
       style: mapStyle(),
       bounds: box(initial ? bounds([initial.route]) : HOME),
       fitBoundsOptions: { padding: 20 },
+      pitch: savedPerspective() === '3d' ? PITCH : 0,
       minZoom: 9,
       maxZoom: 14,
       maxPitch: 60,
@@ -110,7 +121,10 @@ export class GuideMap {
     }));
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
-    map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: 'imperial' }), 'bottom-left');
+    const scale = new maplibregl.ScaleControl({ maxWidth: 80, unit: units.get() });
+    map.addControl(scale, 'bottom-left');
+    // the scale bar is the map's own readout of the reader's choice, so it follows the store rather than a prop
+    this.unwatchUnits = units.subscribe(() => scale.setUnit(units.get()));
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
@@ -118,6 +132,8 @@ export class GuideMap {
 
     map.on('load', () => {
       this.loaded = true;
+      // the camera already opened at the saved pitch; this hangs the mesh under it
+      this.attachTerrain(this.perspective);
       this.addRoutes();
       this.addStarts();
       this.addLabels();
@@ -139,6 +155,7 @@ export class GuideMap {
   }
 
   destroy() {
+    this.unwatchUnits();
     this.clearTimers(this.timers);
     this.clearTimers(this.flyTimers);
     this.observer.disconnect();
@@ -299,6 +316,7 @@ export class GuideMap {
   /** Tilt into 3D, or back down flat. The terrain mesh is only attached in 3D, so 2D costs no extra tiles. */
   setPerspective(mode: Perspective, animate = true) {
     this.attachTerrain(mode);
+    storage.set(VIEW_KEY, mode);
     if (!this.loaded || this.map.getPitch() === this.pitch()) return;
     if (animate && !reducedMotion()) this.map.easeTo({ pitch: this.pitch(), duration: TILT_MS });
     else this.map.jumpTo({ pitch: this.pitch() });
@@ -331,10 +349,13 @@ export class GuideMap {
       const el = m.getElement();
       el.style.opacity = '0';
       el.setAttribute('aria-label', `Photo ${i + 1}: ${ph.cap}`);
-      const html = `<span>${esc(ph.cap)}</span><small>${miles(ph.f * ride.lengthMi)} mi in</small>`;
+      const html = () => {
+        const u = units.get();
+        return `<span>${esc(ph.cap)}</span><small>${dist(ph.f * ride.lengthMi, u)} ${distUnit(u)} in</small>`;
+      };
       el.addEventListener('mouseenter', () => {
         this.events.onPhotoHover(i);
-        this.tip.setLngLat(ll(pointAt(ride.route, ride.cum, ph.f))).setHTML(html).addTo(this.map);
+        this.tip.setLngLat(ll(pointAt(ride.route, ride.cum, ph.f))).setHTML(html()).addTo(this.map);
       });
       el.addEventListener('mouseleave', () => {
         this.events.onPhotoHover(null);

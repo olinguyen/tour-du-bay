@@ -4,9 +4,9 @@ import { RideView } from './components/RideView';
 import { findRide } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
 import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
-import type { Perspective } from './map/GuideMap';
+import { savedPerspective, type Perspective } from './map/GuideMap';
 import { scrollBehavior } from './lib/html';
-import { fmt, miles } from './lib/route';
+import { dist, distUnit, elev, elevUnit, setUnits, useUnits, type Unit } from './lib/measure';
 import { createStore, type Scrub } from './lib/store';
 
 const TITLE = document.title;
@@ -27,7 +27,8 @@ export default function App() {
   const isMobile = useMediaQuery(phoneMedia());
   const [mapOpen, setMapOpen] = useState(false);
   /** flat or tilted onto the terrain mesh; the map is the source of truth and reports back through onPerspective */
-  const [perspective, setPerspective] = useState<Perspective>('2d');
+  const [perspective, setPerspective] = useState<Perspective>(savedPerspective);
+  const units = useUnits();
 
   const side = useRef<HTMLElement>(null);
   const mapEl = useRef<HTMLDivElement>(null);
@@ -322,22 +323,38 @@ export default function App() {
       <main id="mapwrap" ref={mapwrap}>
         <div id="map" ref={mapEl} />
         <div className="compass" aria-hidden="true">N</div>
-        <div className="viewmode" role="group" aria-label="Map perspective">
-          {(['2d', '3d'] as const).map(m => (
-            <button
-              key={m}
-              className={perspective === m ? 'on' : undefined}
-              aria-pressed={perspective === m}
-              onClick={() => gm?.setPerspective(m)}
-            >
-              {m.toUpperCase()}
-            </button>
-          ))}
+        <div className="mapctl">
+          <div className="seg" role="group" aria-label="Map perspective">
+            {(['2d', '3d'] as const).map(m => (
+              <button
+                key={m}
+                className={perspective === m ? 'on' : undefined}
+                aria-pressed={perspective === m}
+                title={m === '3d' ? 'Tilt onto the terrain' : 'Look straight down'}
+                onClick={() => gm?.setPerspective(m)}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="seg" role="group" aria-label="Units">
+            {([['imperial', 'mi'], ['metric', 'km']] as [Unit, string][]).map(([k, label]) => (
+              <button
+                key={k}
+                className={units === k ? 'on' : undefined}
+                aria-pressed={units === k}
+                title={k === 'metric' ? 'Kilometres and metres' : 'Miles and feet'}
+                onClick={() => setUnits(k)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="mapchip" aria-hidden={!ride}>
           <button id="chip-back" tabIndex={ride ? 0 : -1} onClick={closeRide}>← All</button>
           <span>{chipRide.current?.name}</span>
-          <small>{chipRide.current && `${miles(chipRide.current.lengthMi)} mi · ${fmt(chipRide.current.feet)} ft`}</small>
+          <small>{chipRide.current && `${dist(chipRide.current.lengthMi, units)} ${distUnit(units)} · ${elev(chipRide.current.feet, units)} ${elevUnit(units)}`}</small>
           {flying && (
             <button className="chip-stop" ref={chipStop} onClick={toggleFly}>Stop preview</button>
           )}
