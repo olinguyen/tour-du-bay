@@ -88,6 +88,7 @@ export function decodeRoute(e: EncodedRoute): { route: LatLng[]; cum: number[]; 
   const n = e.ele.length - 1;
   const profile: ProfilePoint[] = [];
   let h = 0;
-  for (let i = 0; i <= n; i++) profile.push([(e.span * i) / n / KM_PER_MI, (h += e.ele[i]) / ELE]);
+  // the last sample is the span itself, not a float's width short of it: the profile ends where the route does
+  for (let i = 0; i <= n; i++) profile.push([(i === n ? e.span : (e.span * i) / n) / KM_PER_MI, (h += e.ele[i]) / ELE]);
   return { route, cum, profile };
 }

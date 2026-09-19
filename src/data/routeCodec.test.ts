@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KM_PER_MI } from '../lib/units.mjs';
 import { decodeRoute, encodeRoute, type PreparedRoute } from './routeCodec';
 
 const prepared: PreparedRoute = {
@@ -41,6 +42,15 @@ describe('decodeRoute', () => {
   it('spaces the profile evenly across the span and keeps the heights to a hundredth of a foot', () => {
     expect(d.profile.map(p => p[0])).toEqual([0, 0.25, 0.5, 0.75, 1]);
     d.profile.forEach((p, i) => expect(p[1]).toBeCloseTo(prepared.heights[i], 2));
+  });
+
+  it('ends the profile on the span itself, whatever the span divides into', () => {
+    // 31.9382 km across five gaps is one of the spans where (span * n) / n comes back a float's width off;
+    // a power-of-two count would divide exactly and hide it
+    const span = 31.9382;
+    const awkward = decodeRoute(encodeRoute({ ...prepared, span, heights: [...prepared.heights, 40] }));
+    expect(awkward.profile).toHaveLength(6);
+    expect(awkward.profile[5][0]).toBe(span / KM_PER_MI);
   });
 
   it('rejects a truncated or mismatched encoding rather than drawing nonsense', () => {
