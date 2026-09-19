@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Leg, Ride, RouteCard } from '../data/types';
 import { annotations, legPath, profileScale, ticks, type ProfileScale } from '../lib/profileChart';
-import { elevAt, fmt, gradeAt } from '../lib/route';
+import { elevAt, fmt, gradeAt, miles } from '../lib/route';
 import { useStore, type Scrub, type Store } from '../lib/store';
 
 export const Sparkline = memo(function Sparkline({ ride }: { ride: Ride }) {
@@ -22,7 +22,7 @@ const STEPS = 1000, JUMP = 50;
 export function scrubParts(ride: Ride, f: number) {
   const g = gradeAt(ride.profile, f);
   return {
-    mi: (f * ride.lengthMi).toFixed(1),
+    mi: miles(f * ride.lengthMi),
     ft: fmt(Math.round(elevAt(ride.profile, f))),
     grade: `${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)}%`,
   };
@@ -53,7 +53,7 @@ export const ProfileChart = memo(function ProfileChart({ ride, card, leg, scrub,
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`Elevation profile: ${ride.miles} miles, high point ${Math.round(ride.maxElev)} ft`}
+        aria-label={`Elevation profile: ${miles(ride.lengthMi)} miles, high point ${Math.round(ride.maxElev)} ft`}
         onPointerMove={move}
         onPointerDown={move}
         // a click on the chart shouldn't blur the keyboard scrubber (its blur hides the cursor the click just placed)

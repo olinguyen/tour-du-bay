@@ -17,6 +17,8 @@ export type RoutePoint = [lat: number, lng: number, eleFt: number];
 const SAMPLE_KM = 0.025;
 /** how far the drawn route may stray from the planned one (m) */
 const DRAW_TOLERANCE_M = 3;
+/** how near a route's last point must come to its first for the route to count as returning there (km) */
+const CLOSES_WITHIN_KM = 0.005;
 
 /** height (ft) at distance d (km) along the points, linear between the two nearest by binary search */
 function heightAt(dist: number[], heights: number[], d: number): number {
@@ -28,7 +30,9 @@ function heightAt(dist: number[], heights: number[], d: number): number {
 /**
  * Prepare a planned route's [lat, lng, ft] points for the guide: drop the duplicate where two parts join, measure it,
  * and sample the elevation every ~25 m with a short 1-2-1 smoothing window so terrain-model noise is not counted as
- * hundreds of tiny climbs. The generator validates every point, so a bad one here is a broken file, not a data gap.
+ * hundreds of tiny climbs. A route that comes back to where it began gets one height there, so its climbing and its
+ * descending come to the same figure. The generator validates every point, so a bad one here is a broken file, not a
+ * data gap.
  */
 export function prepareRoute(points: RoutePoint[]): PreparedRoute {
   const pts: RoutePoint[] = [];
@@ -44,8 +48,12 @@ export function prepareRoute(points: RoutePoint[]): PreparedRoute {
   const full: LatLng[] = pts.map(p => [p[0], p[1]]);
   // the terrain model dips a foot or two below sea level along the shore; the guide never shows a negative height
   const fullCum = cum(full), elevations = pts.map(p => Math.max(0, p[2]));
+  // a loop ends where it began, and one spot has one height: the router reads the closing node a few feet off the
+  // opening one often enough, and left alone that gap is what stops a loop's descending from matching its climbing
+  if (hav(full[0], full[full.length - 1]) < CLOSES_WITHIN_KM) elevations[elevations.length - 1] = elevations[0];
   const span = fullCum[fullCum.length - 1], n = Math.max(1, Math.ceil(span / SAMPLE_KM));
-  const at = (i: number) => (span * i) / n;
+  // the last sample lands exactly at the end of the route, not a rounding error short of it
+  const at = (i: number) => (i === n ? span : (span * i) / n);
   const samples = Array.from({ length: n + 1 }, (_, i) => heightAt(fullCum, elevations, at(i)));
   const heights = samples.map((h, i) => (i === 0 || i === n ? h : (samples[i - 1] + 2 * h + samples[i + 1]) / 4));
   // what the map draws: BRouter's every-few-metres vertices are far below what zoom 14 (~7 m/px) can show, and the

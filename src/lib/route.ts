@@ -6,6 +6,8 @@ import { FT_PER_M, FT_PER_MI } from './units.mjs';
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');
+/** a distance in miles, to a tenth: the guide measures its routes, so every figure it shows is the measured one */
+export const miles = (n: number) => n.toFixed(1);
 export const place = (s: string) => s.split(',')[0];
 export const pad2 = (n: number) => String(n).padStart(2, '0');
 export const roman = (n: number) =>
@@ -20,11 +22,13 @@ export const hm = (t: number) => {
  * Cumulative climbing and descending (ft) at each profile point, with hysteresis: a reversal smaller than the
  * threshold (10 m) is terrain-model noise, not a climb; once a climb or descent is established it is counted from its
  * valley or peak, not from where it crossed the threshold. The legs read differences of these, so they always add up
- * to the totals.
+ * to the totals. Erasing the noise never loses height, either: the first move is measured from where the ride began
+ * and the last from where it ended, so the two totals differ by exactly the ride's net elevation change — by nothing
+ * at all on a loop, whose legs therefore descend as much as they climb.
  */
 export function climbSeries(p: ProfilePoint[], thresholdFt = 10 * FT_PER_M): { gain: number[]; loss: number[] } {
-  const gain = [0], loss = [0];
-  let lo = p[0][1], hi = lo, dir: -1 | 0 | 1 = 0, g = 0, l = 0;
+  const gain = [0], loss = [0], start = p[0][1];
+  let lo = start, hi = start, dir: -1 | 0 | 1 = 0, g = 0, l = 0;
   for (let i = 1; i < p.length; i++) {
     const h = p[i][1];
     if (dir === 1) {
@@ -36,12 +40,18 @@ export function climbSeries(p: ProfilePoint[], thresholdFt = 10 * FT_PER_M): { g
     } else {
       lo = Math.min(lo, h);
       hi = Math.max(hi, h);
-      if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - lo);
-      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += hi - h);
+      // the first move is measured from the ride's own starting height, not from the noise it wandered through first
+      if (h - lo >= thresholdFt) (dir = 1), (hi = h), (g += h - start);
+      else if (hi - h >= thresholdFt) (dir = -1), (lo = h), (l += start - h);
     }
     gain.push(g);
     loss.push(l);
   }
+  // the ride stops mid-climb or mid-descent, short of the peak or valley the hysteresis was still waiting for; that
+  // last stretch counts as well, and counting it is what leaves gain - loss equal to the net change in height
+  const drift = p[p.length - 1][1] - start - (g - l);
+  if (drift > 0) gain[gain.length - 1] += drift;
+  else loss[loss.length - 1] -= drift;
   return { gain, loss };
 }
 

@@ -33,7 +33,7 @@ function fromPlan(ride: Ride): Ride {
   const profile: ProfilePoint[] = p.heights.map((h, i) => [(p.span * i) / n / KM_PER_MI, h]);
   const lengthMi = profile[profile.length - 1][0];
   return {
-    ...ride, route: p.route, cum: p.cum, profile, lengthMi, miles: Math.round(lengthMi),
+    ...ride, route: p.route, cum: p.cum, profile, lengthMi,
     feet: Math.round(elevationGain(profile)), maxElev: Math.max(...profile.map(q => q[1])),
   };
 }
@@ -59,7 +59,6 @@ describe.each(RIDES.map(r => [r.slug, r] as const))('%s', (_slug, ride) => {
   });
 
   it('shows the same distance and climbing', () => {
-    expect(ride.miles).toBe(before.miles);
     expect(ride.feet).toBe(before.feet);
     expect(ride.lengthMi).toBeCloseTo(before.lengthMi, 9);
     expect(Math.round(ride.maxElev)).toBe(Math.round(before.maxElev));

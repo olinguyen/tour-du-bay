@@ -70,8 +70,9 @@ additionally rejects responses with extra or multipart geometry and any way tagg
   water and a tunnel climbs over its hill.
 - **Climbing is estimated.** `prepare.ts` samples the profile every ~25 m, smooths it with a short 1-2-1 window,
   and counts gain with 10 m hysteresis (a reversal smaller than 10 m is noise, not a climb). Figures will differ
-  from a GPS unit or another service.
-- **Distance is measured** from the route geometry and shown in whole miles.
+  from a GPS unit or another service. A route returning to its start is given one height there, so a loop's legs
+  descend exactly what its headline figure climbs.
+- **Distance is measured** from the route geometry and shown to a tenth of a mile.
 
 `route-data.json` records, per ride, the service, profile, preparation date and every via point, plus each
 part's routing inputs so `--check` can tell when the plan has moved on. None of that provenance is downloaded
