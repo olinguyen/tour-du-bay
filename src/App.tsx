@@ -3,7 +3,7 @@ import { ListView, sequence, type Sort } from './components/ListView';
 import { RideView } from './components/RideView';
 import { findRide } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
-import { useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
+import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
 import { scrollBehavior } from './lib/html';
 import { fmt } from './lib/route';
 import { createStore, type Scrub } from './lib/store';
@@ -23,7 +23,7 @@ export default function App() {
   const [leg, setLeg] = useState<Leg | null>(null);
   const [scrub] = useState(() => createStore<Scrub>(null));
   /** phone layout: the panel is the page and the map a full-screen layer the toggle button swaps in */
-  const isMobile = useMediaQuery('(max-width: 700px)');
+  const isMobile = useMediaQuery(phoneMedia());
   const [mapOpen, setMapOpen] = useState(false);
 
   const side = useRef<HTMLElement>(null);

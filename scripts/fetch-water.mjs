@@ -16,10 +16,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '../src/data/bay-water.json');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const OUT = resolve(HERE, '../src/data/bay-water.json');
 const OVERPASS = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter';
-/** map bounds, as in GuideMap's MAX_BOUNDS */
-const S = 36.95, W = -123.3, N = 38.45, E = -121.15;
+/** the map's bounds, shared with GuideMap's MAX_BOUNDS; written into the output so terrain.ts knows this extent */
+const { s: S, w: W, n: N, e: E } = JSON.parse(await readFile(resolve(HERE, '../src/data/map-bounds.json'), 'utf8'));
 const arg = (name, dflt) => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').split('=')[1] || dflt;
 const TOLERANCE_M = Number(arg('tolerance', 50));
 const MIN_AREA_KM2 = Number(arg('min-area', 0.2));
@@ -325,7 +326,8 @@ for (const rel of waterRels) {
 }
 console.log(`  ${lakes} lake/reservoir polygon(s) ≥ ${MIN_AREA_KM2} km²`);
 
-const fc = { type: 'FeatureCollection', features };
+// the bbox the coastline rings were closed along: terrain.ts reads it back rather than repeating these numbers
+const fc = { type: 'FeatureCollection', bbox: [W, S, E, N], features };
 const json = JSON.stringify(fc);
 console.log(`  ${features.length} features, ${(json.length / 1024).toFixed(0)} KB`);
 if (json.length > MAX_BYTES) throw new Error(`output exceeds ${MAX_BYTES / 1024} KB; raise --tolerance or --min-area`);

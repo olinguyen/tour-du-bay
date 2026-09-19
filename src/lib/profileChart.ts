@@ -1,6 +1,7 @@
 // Geometry for elevation profile SVGs: scales, paths and the topo-style annotations on the ride view's chart.
 import type { LatLng, Leg, ProfilePoint, Ride, RouteCard } from '../data/types';
 import { climbs, elevAt, fmt, roman, steepDescents } from './route';
+import { FT_PER_MI } from './units.mjs';
 
 export interface Pad {
   l: number;
@@ -54,7 +55,7 @@ export function annotations(ride: Ride, s: ProfileScale, card: RouteCard) {
 
   const grades = climbs(ride).map(({ a, b }) => {
     const e0 = elev(a), e1 = elev(b);
-    const g = ((e1 - e0) / ((b - a) * maxD * 5280)) * 100;
+    const g = ((e1 - e0) / ((b - a) * maxD * FT_PER_MI)) * 100;
     return { x: X(((a + b) / 2) * maxD) - 8, y: Y((e0 + e1) / 2) - 4, label: `${g.toFixed(0)}%` };
   });
 
