@@ -35,7 +35,6 @@ body{display:grid;grid-template-columns:520px minmax(0,1fr);height:100vh;overflo
 body.regions .grp-h i,body.regions .ch[data-area]:not([data-area=""]) i{display:block}
 body.regions .row:hover .tag,body.regions .row.hot .tag,body.regions .row.hot .name,body.regions .row:hover .name,body.regions .grp-h:hover{color:var(--ac-hot)}
 body.regions .row .thumb .shape path{stroke:var(--ac-hot)}body.regions .row .thumb .shape circle{fill:var(--ac-hot)}
-body.regions .leaflet-container path.route{stroke:var(--ac)}body.regions .leaflet-container path.route.hot{stroke:var(--ac-hot)}
 body.regions .start-dot{border-color:var(--ac)}body.regions .rider{background:var(--ac-hot)}
 body.regions .pf-cursor line{stroke:var(--ac)}body.regions .pf-cursor circle{fill:var(--ac-hot)}
 body.regions .legend i{border-color:var(--ink-2)}
@@ -94,8 +93,6 @@ body.regions .legend .l-list i{border-image:linear-gradient(90deg,#b5432a 33%,#6
 body.regions .pf-leg{stroke:var(--ac-hot)}
 .pf-descent{fill:none;stroke:var(--page);stroke-width:1.5;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
 .pf-contours path{fill:none;stroke:var(--ink);stroke-width:.8;vector-effect:non-scaling-stroke}
-.leaflet-container path.route.leg{stroke:var(--route-hot);stroke-width:6;opacity:.9;pointer-events:none;vector-effect:non-scaling-stroke}
-body.regions .leaflet-container path.route.leg{stroke:var(--ac-hot)}
 /* route card */
 .card{margin-top:26px}
 .card summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink);font:500 12px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);user-select:none;-webkit-user-select:none}
@@ -148,6 +145,18 @@ body.regions .leaflet-container path.route.leg{stroke:var(--ac-hot)}
 .compass{position:absolute;top:24px;right:28px;z-index:500;pointer-events:none;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em}
 .compass::before{content:"";display:block;width:0;height:0;border:4.5px solid transparent;border-bottom:15px solid var(--label);border-top:0;margin:0 auto 5px}
 .compass::after{content:"";display:block;width:1px;height:18px;background:var(--label);margin:2px auto 0;opacity:.6}
+/* the reader's two standing choices, as a key card under the compass: how the map is drawn, and in what units.
+   Built from the legend's vocabulary — paper, a hairline rule, an italic caption — so it reads as part of the map
+   rather than as app chrome; the chosen value is marked with a route-coloured underline, never a filled cell. */
+.mapctl{position:absolute;top:100px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
+.mapctl .seg{display:flex;align-items:baseline;gap:14px;padding:7px 13px 8px}
+.mapctl .seg+.seg{border-top:1px solid var(--rule)}
+.mapctl .cap{flex:1;font:italic 400 14px/1 var(--serif);color:var(--ink-3)}
+.mapctl button{all:unset;position:relative;cursor:pointer;box-sizing:border-box;min-width:24px;text-align:center;padding:3px 0 5px;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);transition:color .25s}
+.mapctl button::after{content:"";position:absolute;left:0;right:0;top:calc(50% + 8px);height:1.5px;background:var(--route);opacity:0;transition:opacity .25s}
+.mapctl button:hover{color:var(--ink)}
+.mapctl button.on{color:var(--ink)}
+.mapctl button.on::after{opacity:1}
 .legend{position:absolute;left:28px;bottom:32px;z-index:500;pointer-events:none;color:var(--label);font:italic 400 16px/1.55 var(--serif);transition:opacity .4s}
 .legend i{display:inline-block;width:26px;height:0;border-top:2.5px solid var(--route);vertical-align:middle;margin-right:10px;border-radius:2px}
 .legend b{display:inline-block;width:13px;height:13px;background:var(--page);border:1px solid var(--ink);border-radius:50%;vertical-align:-2px;margin-right:10px}
@@ -163,20 +172,16 @@ body.ride .start-dot{transform:translate(-50%,-50%) scale(.45)}body.ride .start-
 .start-dot em{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:9px;white-space:nowrap;font:italic 400 15px/1 var(--display);letter-spacing:.005em;color:var(--label);text-shadow:0 0 3px var(--halo),0 0 6px var(--halo),0 0 10px var(--halo);opacity:0;transition:opacity .35s;pointer-events:none}
 body.names .start-dot em,.start-dot.hot em{opacity:1}
 .start-dot em.l{left:auto;right:100%;margin-left:0;margin-right:9px}
-body.ride .start-dot em,.leaflet-zoom-anim .start-dot em,body.names .start-dot.dim em,.start-dot.dim em{opacity:0}
+body.ride .start-dot em,body.names .start-dot.dim em,.start-dot.dim em{opacity:0}
 .legend i.cl{border-top-width:6px;border-color:var(--route-hot);opacity:.45}
-.leaflet-container path.route.climb{stroke:var(--route-hot);stroke-width:7;opacity:.45;stroke-linecap:butt;pointer-events:none}
-body.regions .leaflet-container path.route.climb{stroke:var(--ac-hot)}
 body.ride .legend .l-list{display:none}body.ride .legend .l-ride{display:block}
 .mapchip{position:absolute;top:24px;left:28px;z-index:600;white-space:nowrap;display:flex;align-items:baseline;gap:14px;background:var(--page);border:1px solid var(--ink);padding:9px 16px 10px 12px;font:400 17px/1.2 var(--display);letter-spacing:-.005em;opacity:0;transform:translateY(-8px);transition:all .4s;pointer-events:none}
 body.ride .mapchip{opacity:1;transform:none;pointer-events:auto}
 .mapchip button{all:unset;cursor:pointer;font:500 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);padding:2px 10px 2px 0;border-right:1px solid var(--rule)}
 .mapchip button:hover{color:var(--route)}
 .mapchip small{font:500 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.leaflet-container .leaflet-marker-icon.leaflet-interactive{cursor:pointer}
-.row,.ch,.sb,.grp-h,.topbar button,.preview,.also button,.pager button,.mapchip button,.ptab,.start-dot,.photo-pin{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
-.grp-h:focus-visible,.topbar button:focus-visible,.preview:focus-visible,.also button:focus-visible,.pager button:focus-visible,.mapchip button:focus-visible{outline:1px solid var(--route);outline-offset:4px}
-.leaflet-container path.route.faint{opacity:.16;stroke-width:2}
+.row,.ch,.sb,.grp-h,.topbar button,.preview,.also button,.pager button,.mapchip button,.mapctl button,.ptab,.start-dot,.photo-pin{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.grp-h:focus-visible,.topbar button:focus-visible,.preview:focus-visible,.also button:focus-visible,.pager button:focus-visible,.mapchip button:focus-visible,.mapctl button:focus-visible{outline:1px solid var(--route);outline-offset:4px}
 /* React mount point: let #side and #mapwrap lay out as direct children of body */
 #root{display:contents}
 #pf{touch-action:pan-y}
@@ -200,7 +205,7 @@ h2.grp-hd{margin:0;font:inherit}
 .leg{all:unset;grid-area:1/1/-1/-1;display:grid;grid-template:inherit;gap:inherit;align-items:inherit;justify-items:inherit;cursor:pointer}
 .leg:focus-visible{outline:1px solid var(--route);outline-offset:2px}
 .story figure:focus-visible{outline:1px solid var(--route);outline-offset:4px}
-.leaflet-container:focus-visible,.leaflet-container .leaflet-marker-icon:not(.photo-pin):focus-visible,.leaflet-container path.leaflet-interactive:focus-visible{outline:1px solid var(--route);outline-offset:3px}
+.maplibregl-map:focus-visible,.maplibregl-canvas:focus-visible{outline:1px solid var(--route);outline-offset:3px}
 /* photo pins are zero-size anchors; ring the numbered disc instead */
 .photo-pin:focus-visible{outline:none}
 .photo-pin:focus-visible i{outline:1px solid var(--route);outline-offset:2px}
@@ -224,13 +229,16 @@ h2.grp-hd{margin:0;font:inherit}
   body.map-open #mapwrap{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .2s}
   .compass,.legend,html.float .ptab,html.float.phide .ptab{display:none}
   html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
-  html.float .leaflet-bottom.leaflet-left,html.float.phide .leaflet-bottom.leaflet-left{left:0}
+  html.float .maplibregl-ctrl-bottom-left,html.float.phide .maplibregl-ctrl-bottom-left{left:0}
+  .mapctl{top:auto;right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}
+  .mapctl .seg{padding:0 14px;gap:14px;align-items:center}
+  .mapctl button{min-height:44px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;padding:0}
   /* the chip is the way back to the list from the map: give its buttons a full tap target */
   .mapchip{top:16px;right:16px;max-width:none;white-space:normal;flex-wrap:wrap;align-items:center;gap:0 12px;padding:4px 14px 4px 4px}
   .mapchip button{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
   .mapchip .chip-stop{padding:0 0 0 12px}
-  .leaflet-bottom{bottom:calc(max(22px,env(safe-area-inset-bottom)) + 52px)}
-  .leaflet-container .leaflet-control-attribution{font-size:8px;max-width:calc(100vw - 120px)}
+  .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{bottom:calc(max(22px,env(safe-area-inset-bottom)) + 52px)}
+  .maplibregl-map .maplibregl-ctrl-attrib{font-size:8px;max-width:calc(100vw - 120px)}
   .map-toggle{all:unset;box-sizing:border-box;position:fixed;z-index:1300;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 24px;border-radius:999px;background:var(--ink);color:var(--page);font:500 12px var(--sans);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;cursor:pointer;box-shadow:0 12px 30px -12px rgba(42,36,29,.6);user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
   .map-toggle:focus-visible{outline:1px solid var(--page);outline-offset:-5px}
 }

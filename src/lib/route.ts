@@ -6,8 +6,6 @@ import { FT_PER_M, FT_PER_MI } from './units.mjs';
 
 export const areaSlug = (a: string) => a.toLowerCase().replace(/[^a-z]+/g, '-');
 export const fmt = (n: number) => n.toLocaleString('en-US');
-/** a distance in miles, to a tenth: the guide measures its routes, so every figure it shows is the measured one */
-export const miles = (n: number) => n.toFixed(1);
 export const place = (s: string) => s.split(',')[0];
 export const pad2 = (n: number) => String(n).padStart(2, '0');
 export const roman = (n: number) =>

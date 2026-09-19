@@ -1,7 +1,8 @@
 // Geometry for elevation profile SVGs: scales, paths and the topo-style annotations on the ride view's chart.
 import type { LatLng, Leg, ProfilePoint, Ride, RouteCard } from '../data/types';
 import { climbs, elevAt, fmt, roman, steepDescents } from './route';
-import { FT_PER_MI } from './units.mjs';
+import { distUnit, elev as elevOf, elevUnit, type Unit } from './measure';
+import { FT_PER_M, FT_PER_MI, KM_PER_MI } from './units.mjs';
 
 export interface Pad {
   l: number;
@@ -37,16 +38,19 @@ export function profileScale(ride: Ride, W: number, H: number, P: Pad) {
   return { W, H, P, pts, maxD, maxE, X, Y, path, line, area, fractionAt };
 }
 
-export function ticks(s: ProfileScale) {
+export function ticks(s: ProfileScale, u: Unit = 'imperial') {
+  const metric = u === 'metric';
+  // the scale is in miles and feet either way; only the steps between rules and their labels change
+  const eStep = metric ? 250 * FT_PER_M : 1000, dStep = metric ? 10 / KM_PER_MI : 5;
   const y: { y: number; label: string }[] = [];
-  for (let e = 1000; e < s.maxE; e += 1000) y.push({ y: s.Y(e), label: `${fmt(e)} ft` });
+  for (let e = eStep; e < s.maxE; e += eStep) y.push({ y: s.Y(e), label: `${fmt(Math.round(metric ? e / FT_PER_M : e))} ${elevUnit(u)}` });
   const x: { x: number; label: string }[] = [];
-  for (let d = 5; d < s.maxD; d += 5) x.push({ x: s.X(d), label: `${d} mi` });
+  for (let d = dStep; d < s.maxD; d += dStep) x.push({ x: s.X(d), label: `${Math.round(metric ? d * KM_PER_MI : d)} ${distUnit(u)}` });
   return { y, x };
 }
 
 /** hachured contours under the line, gradient on each climb, dashed steep descents, a summit mark, waypoint numerals */
-export function annotations(ride: Ride, s: ProfileScale, card: RouteCard) {
+export function annotations(ride: Ride, s: ProfileScale, card: RouteCard, u: Unit = 'imperial') {
   const { W, H, P, pts, X, Y, maxD } = s;
   const elev = (f: number) => elevAt(pts, f);
 
@@ -68,7 +72,7 @@ export function annotations(ride: Ride, s: ProfileScale, card: RouteCard) {
     x: hx,
     y: hy - 10,
     anchor: hx > W - 100 ? 'end' : hx < 100 ? 'start' : 'middle',
-    label: `${fmt(Math.round(hi[1]))} ft · high point`,
+    label: `${elevOf(hi[1], u)} ${elevUnit(u)} · high point`,
   } as const;
 
   const wps = card.wp.flatMap((w, i) => {

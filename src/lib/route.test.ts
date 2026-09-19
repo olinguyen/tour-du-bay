@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfilePoint } from '../data/types';
 import {
-  areaSlug, climbSeries, climbs, elevAt, fmt, gradeAt, highPoint, hm, hoursOf, legs, miles, pad2, place, roman,
+  areaSlug, climbSeries, climbs, elevAt, fmt, gradeAt, highPoint, hm, hoursOf, legs, pad2, place, roman,
   steepDescents, waypoints,
 } from './route';
 import { CLIMB, PROFILE, SUMMIT_FT, makeRide } from './testRide';
@@ -31,8 +31,6 @@ describe('formatters', () => {
     expect(place('Fairfax, the Parkade')).toBe('Fairfax');
     expect(areaSlug('East Bay')).toBe('east-bay');
     expect(fmt(4900)).toBe('4,900');
-    expect(miles(19.848)).toBe('19.8');
-    expect(miles(17)).toBe('17.0');
   });
 });
 

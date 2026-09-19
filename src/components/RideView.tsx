@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { RIDES, ridesIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
-import { areaSlug, fmt, hm, legs, miles, pad2, place, roman } from '../lib/route';
+import { areaSlug, hm, legs, pad2, place, roman } from '../lib/route';
+import { dist, distUnit, distWord, elev, elevCoarse, elevUnit, elevWord, useUnits } from '../lib/measure';
 import { useStore, type Scrub, type Store } from '../lib/store';
 import { ProfileChart, scrubParts } from './ProfileChart';
 
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, onOpen, onToggleFly, onPhotoHover, onLeg }: Props) {
+  const u = useUnits();
   const card = useMemo(() => legs(r), [r]);
   const [cardOpen, setCardOpen] = useState(() => storage.get(CARD_KEY) === '1');
 
@@ -61,7 +63,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         data-i={i}
         className={hotPhoto === i ? 'hot' : undefined}
         tabIndex={0}
-        aria-label={`Photo ${i + 1}: ${ph.cap}, ${miles(ph.f * r.lengthMi)} miles in`}
+        aria-label={`Photo ${i + 1}: ${ph.cap}, ${dist(ph.f * r.lengthMi, u)} ${distWord(u)} in`}
         onMouseEnter={enter}
         onMouseLeave={leave}
         onFocus={enter}
@@ -71,7 +73,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           <img className="ph" src={ph.src} alt={ph.cap} loading="lazy" />
         ) : (
           <div className="ph" aria-hidden="true">
-            <b>photo · {miles(ph.f * r.lengthMi)} mi in</b>
+            <b>photo · {dist(ph.f * r.lengthMi, u)} {distUnit(u)} in</b>
           </div>
         )}
         <figcaption>
@@ -102,10 +104,10 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         <b>{r.start}</b>
       </p>
       <div className="facts">
-        <div><b>{miles(r.lengthMi)}</b><span className="mono">miles</span></div>
-        <div><b>{fmt(r.feet)}</b><span className="mono">ft of climbing</span></div>
+        <div><b>{dist(r.lengthMi, u)}</b><span className="mono">{distWord(u)}</span></div>
+        <div><b>{elev(r.feet, u)}</b><span className="mono">{elevUnit(u)} of climbing</span></div>
         <div><b>{r.hours.replace(/\s*h$/, '')}</b><span className="mono">hours riding</span></div>
-        <div><b>{fmt(Math.round(r.maxElev / 10) * 10)}</b><span className="mono">ft high point</span></div>
+        <div><b>{elevCoarse(r.maxElev, u)}</b><span className="mono">{elevUnit(u)} high point</span></div>
       </div>
 
       <section className="profile">
@@ -116,7 +118,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         <ProfileChart ride={r} card={card} leg={leg} scrub={scrub} onScrub={onScrub} />
         <div className="pf-ends mono">
           <span>{from}</span>
-          <span>{miles(r.lengthMi)} mi · {r.finish ? place(r.finish) : `back to ${from}`}</span>
+          <span>{dist(r.lengthMi, u)} {distUnit(u)} · {r.finish ? place(r.finish) : `back to ${from}`}</span>
         </div>
         <button className={'preview' + (flying ? ' on' : '')} id="fly" onClick={onToggleFly}>
           <i aria-hidden="true" />
@@ -140,7 +142,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
         </summary>
         <ol>
           {card.legs.map((l, i) => {
-            const dist = miles(l.mi), gain = fmt(Math.round(l.gain / 10) * 10), t = hm(l.t);
+            const mi = dist(l.mi, u), gain = elevCoarse(l.gain, u), t = hm(l.t);
             // hover lives on the li so its padding highlights the same as its CSS :hover does
             return (
               <li
@@ -153,7 +155,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
                 <button
                   type="button"
                   className="leg"
-                  aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${dist} miles, +${gain} feet, ${t}`}
+                  aria-label={`Leg ${roman(i + 1)}, ${l.from} to ${l.to}, ${mi} ${distWord(u)}, +${gain} ${elevWord(u)}, ${t}`}
                   onFocus={() => onLeg(l)}
                   onBlur={() => onLeg(null)}
                   onClick={() => scrubTo({ f: l.b, soft: false })}
@@ -163,10 +165,10 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
                     {l.from} <em>→</em> {l.to}
                   </span>
                   <span className="st">
-                    <span>{dist}<i> mi</i></span>
+                    <span>{mi}<i> {distUnit(u)}</i></span>
                     <span>
-                      +{gain}<i> ft</i>
-                      <s>−{fmt(Math.round(l.loss / 10) * 10)}</s>
+                      +{gain}<i> {elevUnit(u)}</i>
+                      <s>−{elevCoarse(l.loss, u)}</s>
                     </span>
                     <span>{t}</span>
                   </span>
@@ -178,8 +180,8 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
             <b />
             <span className="lg">{card.loop ? 'Round trip' : 'Point to point'}</span>
             <span className="st">
-              <span>{miles(r.lengthMi)}<i> mi</i></span>
-              <span>+{fmt(r.feet)}<i> ft</i></span>
+              <span>{dist(r.lengthMi, u)}<i> {distUnit(u)}</i></span>
+              <span>+{elev(r.feet, u)}<i> {elevUnit(u)}</i></span>
               <span>{hm(card.hours)}</span>
             </span>
           </li>
@@ -203,7 +205,7 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
           {near.map(x => (
             <button key={x.slug} onClick={() => onOpen(x.slug)}>
               {x.name}
-              <span>{miles(x.lengthMi)} mi · {fmt(x.feet)} ft</span>
+              <span>{dist(x.lengthMi, u)} {distUnit(u)} · {elev(x.feet, u)} {elevUnit(u)}</span>
             </button>
           ))}
         </div>
@@ -224,11 +226,12 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
 
 function Readout({ ride, scrub }: { ride: Ride; scrub: Store<Scrub> }) {
   const v = useStore(scrub);
+  const u = useUnits();
   if (!v) return <div className="readout" />;
-  const p = scrubParts(ride, v.f);
+  const p = scrubParts(ride, v.f, u);
   return (
     <div className="readout">
-      <b>{p.mi}</b> mi · <b>{p.ft}</b> ft · <b>{p.grade}</b>
+      <b>{p.mi}</b> {p.d} · <b>{p.ft}</b> {p.e} · <b>{p.grade}</b>
     </div>
   );
 }
