@@ -19,4 +19,14 @@ export default defineConfig({
   base: './',
   plugins: [react(), csp()],
   server: { port: 5173 },
+  build: {
+    rollupOptions: {
+      output: {
+        // The routes are a third of the page's JavaScript and change only when a ride is replanned, so they get
+        // their own chunk: the browser fetches it alongside the app chunk (Vite preloads it from index.html)
+        // rather than after it, and an edit to the app leaves the cached copy alone.
+        manualChunks: id => (/src[\\/]data[\\/]routes\.generated\./.test(id) ? 'routes' : undefined),
+      },
+    },
+  },
 });
