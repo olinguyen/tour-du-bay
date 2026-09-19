@@ -1,19 +1,28 @@
-// Content-preparation tool, not a build step: turns scripts/route-plans.json into src/data/routes.generated.ts
-// by asking BRouter for road-following geometry (with terrain elevation) between each segment's via points.
-// Node 18+: node scripts/prepare-routes.mjs [--check | segment-id ...]
+// Content-preparation tool, not a build step: turns scripts/route-plans.json into the two committed files that
+// carry the guide's geometry, by asking BRouter for road-following routes (with terrain elevation) between each
+// segment's via points.
+//
+//   scripts/route-data.json        the full planned geometry and its provenance — this tool's own record, read
+//                                  back on the next run so unchanged segments are never requested again
+//   src/data/routes.generated.ts   what the page downloads: the same routes prepared for drawing (simplified to
+//                                  3 m, resampled every 25 m) and delta-encoded, about a third of the size
+//
+// Node 22.18+ (it imports src/lib/prepare.ts directly, relying on Node's TypeScript stripping):
+// node scripts/prepare-routes.mjs [--check | segment-id ...]
 //   (no args)     request every segment that is missing or whose via points / routing inputs changed, then publish
 //   segment-id …  request just those segments again (even if unchanged), reuse the rest, then publish
-//   --check       validate the published file against the plan offline; never writes or fetches
+//   --check       validate both published files against the plan offline; never writes or fetches
 import * as fs from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
+import { prepareCollection } from '../src/lib/prepare.ts';
+import { FT_PER_M, M_PER_MI } from '../src/lib/units.mjs';
 
 const endpoint = 'https://brouter.de/brouter';
 const alternativeIndex = 0;
-const FT_PER_M = 3.28084;
 /** consecutive parts must meet within this many metres; a route must begin this close to its named start */
 const JOIN_M = 30, START_M = 150;
 
@@ -27,7 +36,8 @@ export async function prepareRoutes({
   log = console,
 } = {}) {
   const plans = JSON.parse(await files.readFile(new URL('scripts/route-plans.json', root), 'utf8'));
-  const destination = new URL('src/data/routes.generated.ts', root);
+  const dataPath = new URL('scripts/route-data.json', root);
+  const modulePath = new URL('src/data/routes.generated.ts', root);
   const checkpointPath = new URL('scripts/.route-data-checkpoint.json', root);
   const checkOnly = args.includes('--check');
   const requested = new Set(args.filter(argument => argument !== '--check'));
@@ -43,9 +53,9 @@ export async function prepareRoutes({
   }
   const catalog = catalogSlugs(await files.readFile(new URL('src/data/rides.ts', root), 'utf8'));
 
-  const previousText = await readOptional(destination, files);
+  const previousText = await readOptional(dataPath, files);
   if (checkOnly && previousText === null) throw new Error('Missing published route file');
-  const previous = previousText === null ? {} : parseBundle(previousText);
+  const previous = previousText === null ? {} : parseData(previousText);
   const baseHash = previousText === null ? null : createHash('sha256').update(previousText).digest('hex');
   let checkpoint = { version: 1, baseHash, segments: {} };
   if (!checkOnly) {
@@ -54,7 +64,7 @@ export async function prepareRoutes({
       const saved = JSON.parse(savedText);
       if (saved.version !== 1 || !isRecord(saved.segments)) throw new Error('Invalid route checkpoint');
       if (saved.baseHash === baseHash) checkpoint = saved;
-      else log.warn('Ignoring route checkpoint: the published route file has changed');
+      else log.warn('Ignoring route checkpoint: the published route data has changed');
     }
   }
   // Retained geometry: the published rides' parts, then any checkpointed parts whose routing inputs still match.
@@ -112,7 +122,7 @@ export async function prepareRoutes({
       checkpoint.segments[id] = part;
       // Only this private checkpoint may be incomplete or have disconnected joins.
       await atomicWrite(checkpointPath, `${JSON.stringify(checkpoint)}\n`, files);
-      log.log(`${id}: ${part.coordinates.length} points, ${(part.distanceMeters / 1609.344).toFixed(1)} mi`);
+      log.log(`${id}: ${part.coordinates.length} points, ${(part.distanceMeters / M_PER_MI).toFixed(1)} mi`);
       await pause(1100);
     }
     // Role is editorial metadata; updating it does not change routing provenance.
@@ -123,15 +133,25 @@ export async function prepareRoutes({
 
   const routes = checkOnly ? previous : assemble(plans, segments, previous);
   validateCollection(routes, plans, inputs, vias, catalog, log);
-  if (!checkOnly) {
-    const text = serialize(routes, plans.profile);
-    if (text === previousText) log.log('Nothing changed; the published file is left as it is');
-    else await atomicWrite(destination, text, files);
+  // The page's copy is derived, so it is never edited by hand and never read back: it is written from the data
+  // above, and --check re-derives it to catch a file that was committed without the other.
+  const moduleText = serializeModule(routes, plans.profile);
+  const publishedModule = await readOptional(modulePath, files);
+  if (checkOnly) {
+    if (publishedModule === null) throw new Error('Missing published route module');
+    if (publishedModule !== moduleText) {
+      throw new Error('src/data/routes.generated.ts does not match scripts/route-data.json; run `npm run routes` to republish it (no routing requests are made when the plan is unchanged)');
+    }
+  } else {
+    const text = serializeData(routes);
+    if (text === previousText && publishedModule === moduleText) log.log('Nothing changed; the published files are left as they are');
+    if (text !== previousText) await atomicWrite(dataPath, text, files);
+    if (publishedModule !== moduleText) await atomicWrite(modulePath, moduleText, files);
     // Publication has succeeded. A cleanup failure must not report generation failure.
     try { await files.rm(checkpointPath, { force: true }); }
     catch (error) { log.warn(`Published successfully; could not remove checkpoint: ${error.message}`); }
   }
-  log.log(`${checkOnly ? 'Validated' : 'Prepared'} ${Object.keys(routes).length} routes in ${fileURLToPath(destination)}`);
+  log.log(`${checkOnly ? 'Validated' : 'Prepared'} ${Object.keys(routes).length} routes in ${fileURLToPath(modulePath)}`);
   return routes;
 }
 
@@ -181,45 +201,30 @@ function publishedSegments(routes) {
   return segments;
 }
 
-function serialize(routes, profile) {
+/** This tool's own record: the full planned geometry and where it came from. */
+function serializeData(routes) {
   const lines = Object.entries(routes).map(([slug, route]) => {
     const points = route.points.map(point => JSON.stringify(point)).join(',');
     return `  ${JSON.stringify(slug)}: {\n    "source": ${JSON.stringify(route.source)},\n    "points": [${points}]\n  }`;
   });
-  return `// GENERATED by scripts/prepare-routes.mjs — do not edit
-// Planned, road-following routes from BRouter (profile "${profile}") over OpenStreetMap ways; elevation is BRouter's
-// terrain model, so bridges, tunnels and road cuts follow the ground rather than the road. Regenerate with
-// \`npm run routes\` after editing scripts/route-plans.json; \`node scripts/prepare-routes.mjs --check\` validates offline.
-export type RoutePoint = [lat: number, lng: number, eleFt: number];
-export type RouteVia = [lat: number, lng: number];
-export interface RoutePart {
-  id: string;
-  role: 'core' | 'connector';
-  via: RouteVia[];
-  inputs: { endpoint: string; profile: string; alternativeIndex: number };
-  /** number of consecutive entries of \`points\` this part contributes */
-  count: number;
-  distanceMeters: number;
-  ascentMeters: number;
-  generatedAt: string;
-}
-export interface RouteSource {
-  service: string;
-  profile: string;
-  prepared: string;
-  /** id of the named start in scripts/route-plans.json */
-  start: string;
-  /** every planned via point, in ride order */
-  via: RouteVia[];
-  parts: RoutePart[];
-  references?: string[];
-}
-export interface GeneratedRoute {
-  points: RoutePoint[];
-  source: RouteSource;
+  return `{\n${lines.join(',\n')}\n}\n`;
 }
 
-export const ROUTES: Record<string, GeneratedRoute> = {
+/** What the page downloads: the same routes prepared for drawing and delta-encoded (src/data/routeCodec.ts). */
+export function serializeModule(routes, profile) {
+  const encoded = prepareCollection(Object.fromEntries(Object.entries(routes).map(([slug, route]) => [slug, route.points])));
+  const lines = Object.entries(encoded).map(([slug, route]) =>
+    `  ${JSON.stringify(slug)}: { "span": ${route.span}, "coords": [${route.coords}], "cum": [${route.cum}], "ele": [${route.ele}] }`);
+  return `// GENERATED by scripts/prepare-routes.mjs — do not edit
+// Planned, road-following routes from BRouter (profile "${profile}") over OpenStreetMap ways; elevation is BRouter's
+// terrain model, so bridges, tunnels and road cuts follow the ground rather than the road. The planned geometry and
+// its provenance live in scripts/route-data.json; what is here is that geometry prepared for the page — simplified
+// to 3 m for drawing, resampled every 25 m for the profile — and written as differences between scaled integers,
+// which src/data/routeCodec.ts decodes. Regenerate with \`npm run routes\` after editing scripts/route-plans.json;
+// \`node scripts/prepare-routes.mjs --check\` validates both files offline.
+import type { EncodedRoute } from './routeCodec';
+
+export const ROUTES: Record<string, EncodedRoute> = {
 ${lines.join(',\n')}
 };
 `;
@@ -233,13 +238,11 @@ async function readOptional(path, files) {
   }
 }
 
-/** Read ROUTES back out of the generated module; the literal is plain JSON. */
-function parseBundle(text) {
-  const match = text.match(/\nexport const ROUTES\s*:[^=]*=\s*(\{[\s\S]*\});\s*$/);
-  if (!match) throw new Error('Unreadable published route file: expected an exported ROUTES literal');
+/** Read back this tool's own record of what it has already published. */
+function parseData(text) {
   let routes;
-  try { routes = JSON.parse(match[1]); }
-  catch (error) { throw new Error('Unreadable published route file: invalid literal', { cause: error }); }
+  try { routes = JSON.parse(text); }
+  catch (error) { throw new Error('Unreadable published route file: invalid JSON', { cause: error }); }
   if (!isRecord(routes)) throw new Error('Invalid published route file');
   for (const [slug, route] of Object.entries(routes)) {
     if (!isRecord(route) || !isRecord(route.source) || !Array.isArray(route.source.parts) || !Array.isArray(route.points)

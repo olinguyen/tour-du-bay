@@ -1,6 +1,7 @@
 // The Leaflet side of the guide. React owns the state; this class owns the map and mirrors that state onto it.
 import L from 'leaflet';
 import { LABELS, RIDES, ridesIn } from '../data/guide';
+import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion } from '../lib/html';
@@ -9,7 +10,8 @@ import { lazySvg } from './lazyRenderer';
 import { addLabels, terrainLayer } from './terrain';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
-const MAX_BOUNDS: [LatLng, LatLng] = [[36.95, -123.3], [38.45, -121.15]];
+/** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
+const MAX_BOUNDS: [LatLng, LatLng] = [[MAP_BOUNDS.s, MAP_BOUNDS.w], [MAP_BOUNDS.n, MAP_BOUNDS.e]];
 /** interval between the preview's camera moves (ms) */
 const FOLLOW_MS = 50;
 /** map px around the floating panel: 16 margin + 8 gap; its width is the stylesheet's (measured, see pad) */

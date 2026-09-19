@@ -5,6 +5,20 @@ The guide's route lines, distances, climbing figures and elevation profiles all 
 It is a content-editing tool, not a build step: the generated file is committed, and the site never calls a
 routing service.
 
+It writes two committed files:
+
+- **`route-data.json`** — the planned geometry as BRouter returned it, with its provenance. This is the tool's
+  own record: it is read back on the next run so an unchanged segment is never requested again. Nothing in
+  `src/` imports it.
+- **`src/data/routes.generated.ts`** — what the page downloads. The same routes prepared for drawing
+  (`src/lib/prepare.ts`: simplified to 3 m, resampled every 25 m, smoothed) and written as differences between
+  scaled integers, which `src/data/routeCodec.ts` decodes. Preparing offline rather than in the browser is what
+  keeps the download near 50 KB instead of 127 KB, and takes ~45 ms of work off every page load.
+
+The second file is derived from the first, so it is never edited by hand; `--check` re-derives it and fails if
+the two were not committed together. Because the script imports `src/lib/prepare.ts` directly, it needs Node
+22.18 or newer (for TypeScript stripping).
+
 ## Adding or changing a ride
 
 1. Add the ride's words to `src/data/rides.ts`. Its `{ slug:` must begin a line — the script reads slugs from
@@ -23,7 +37,7 @@ routing service.
    ```sh
    npm run routes                                  # request missing or changed segments, reuse the rest, publish
    node scripts/prepare-routes.mjs tam-climb       # re-request just these segments even if unchanged
-   node scripts/prepare-routes.mjs --check         # validate the committed file against the plan; offline
+   node scripts/prepare-routes.mjs --check         # validate both committed files against the plan; offline
    ```
 
    Requests go to the public BRouter instance, one per segment with a 1.1 s pause, using the `profile` named in
@@ -31,11 +45,13 @@ routing service.
    happily pick a highway over a quiet lane, so put a via point or two on the lane you mean, and put them on the
    road itself rather than on a trail beside it (the script warns when more than 100 m of a segment runs on
    paths, footways or tracks). A shoreline point without terrain elevation takes its neighbour's.
-4. Run `npm run test:routes` (offline regression checks of the script itself) and `npm run build`.
+4. Run `npm test`, `npm run test:routes` (offline regression checks of the script itself) and `npm run build`.
+   `src/data/routes.test.ts` re-prepares `route-data.json` from scratch and checks that what the guide draws —
+   both SVG paths, the figures, the climbs, waypoints and legs — is unchanged by the encoding.
 
 Each successful request is saved to the ignored `.route-data-checkpoint.json`, so an interrupted run resumes
 where it stopped; the published file is replaced atomically only once the whole collection validates. The
-checkpoint is bound to the published file's hash and ignored if that file changes; delete it to discard an
+checkpoint is bound to `route-data.json`'s hash and ignored if that file changes; delete it to discard an
 unfinished run. Changing `profile` makes every segment stale, and a segment whose `via` list changed must be
 regenerated along with any `reverseVia` twin.
 
@@ -52,10 +68,12 @@ additionally rejects responses with extra or multipart geometry and any way tagg
 - **Elevation is a terrain model.** Each point carries BRouter's ground elevation, converted to feet. Bridges,
   tunnels and road cuts follow the ground rather than the road surface, so the Golden Gate Bridge dips to the
   water and a tunnel climbs over its hill.
-- **Climbing is estimated.** `guide.ts` samples the profile every ~25 m, smooths it with a short 1-2-1 window,
+- **Climbing is estimated.** `prepare.ts` samples the profile every ~25 m, smooths it with a short 1-2-1 window,
   and counts gain with 10 m hysteresis (a reversal smaller than 10 m is noise, not a climb). Figures will differ
-  from a GPS unit or another service.
-- **Distance is measured** from the route geometry and shown in whole miles.
+  from a GPS unit or another service. A route returning to its start is given one height there, so a loop's legs
+  descend exactly what its headline figure climbs.
+- **Distance is measured** from the route geometry and shown to a tenth of a mile.
 
-The generated file records, per ride, the service, profile, preparation date and every via point, plus each
-part's routing inputs so `--check` can tell when the plan has moved on.
+`route-data.json` records, per ride, the service, profile, preparation date and every via point, plus each
+part's routing inputs so `--check` can tell when the plan has moved on. None of that provenance is downloaded
+by the page.

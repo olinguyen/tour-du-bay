@@ -34,6 +34,17 @@ export function useHashRoute(): [string | null, (slug: string | null) => void] {
   return [slug, navigate];
 }
 
+let phoneQuery = '';
+/**
+ * The phone layout's media query, taken from --phone-max in guide.css so the stylesheet's `@media` and the query
+ * JavaScript watches cannot drift apart (drift would stack the panel while JS still thought it was on a desktop).
+ * Read once, on first use: the stylesheets are in the document before any component renders.
+ */
+export function phoneMedia(): string {
+  if (!phoneQuery) phoneQuery = `(max-width: ${getComputedStyle(document.documentElement).getPropertyValue('--phone-max').trim()})`;
+  return phoneQuery;
+}
+
 /** Whether a media query matches, kept live through matchMedia's change events (rotation, window resize). */
 export function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(

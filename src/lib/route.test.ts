@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { RoutePoint } from '../data/routes.generated';
 import type { ProfilePoint } from '../data/types';
 import {
-  areaSlug, climbSeries, climbs, elevAt, elevationGain, fmt, gradeAt, highPoint, hm, hoursOf, legs, miles, pad2, place,
-  prepareRoute, roman, steepDescents, waypoints,
+  areaSlug, climbSeries, climbs, elevAt, fmt, gradeAt, highPoint, hm, hoursOf, legs, miles, pad2, place, roman,
+  steepDescents, waypoints,
 } from './route';
 import { CLIMB, PROFILE, SUMMIT_FT, makeRide } from './testRide';
 
@@ -21,14 +20,6 @@ const LOOP: ProfilePoint[] = Array.from({ length: 21 }, (_, i): ProfilePoint => 
   if (d <= 6) return [d, SUMMIT_FT];
   return [d, SUMMIT_FT - ((SUMMIT_FT - 200) * (d - 6)) / 4];
 });
-
-/** a triangle back to where it began, whose closing point the router read 40 ft above the opening one */
-const TRIANGLE: RoutePoint[] = [
-  [37.8, -122.42, 100],
-  [37.81, -122.42, 300],
-  [37.81, -122.41, 250],
-  [37.8, -122.42, 140],
-];
 
 describe('formatters', () => {
   it('format times, numerals and names', () => {
@@ -69,19 +60,6 @@ describe('climbSeries', () => {
       expect(gain[i]).toBeGreaterThanOrEqual(gain[i - 1]);
       expect(loss[i]).toBeGreaterThanOrEqual(loss[i - 1]);
     }
-  });
-});
-
-describe('prepareRoute', () => {
-  it('gives a route that returns to its start one height there, not two', () => {
-    const { profile } = prepareRoute(TRIANGLE);
-    expect(profile[0][1]).toBe(100);
-    expect(profile[profile.length - 1][1]).toBe(100);
-    expect(elevationGain(profile)).toBeCloseTo(climbSeries(profile).loss[profile.length - 1], 9);
-  });
-  it('leaves a point-to-point route ending where the router put it', () => {
-    const { profile } = prepareRoute(TRIANGLE.slice(0, 3));
-    expect(profile[profile.length - 1][1]).toBe(250);
   });
 });
 
