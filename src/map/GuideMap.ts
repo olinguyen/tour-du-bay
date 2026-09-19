@@ -12,7 +12,7 @@ const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 const MAX_BOUNDS: [LatLng, LatLng] = [[36.95, -123.3], [38.45, -121.15]];
 /** interval between the preview's camera moves (ms) */
 const FOLLOW_MS = 50;
-/** map px around the floating panel: 16 margin + 8 gap; the panel's own width comes from the stylesheet (--panel-w) */
+/** map px around the floating panel: 16 margin + 8 gap; its width is the stylesheet's (measured, see pad) */
 const PANEL_GAP_PX = 24;
 /** map px the floating toggle button covers along the bottom edge on a phone */
 const TOGGLE_PX = 80;

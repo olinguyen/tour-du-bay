@@ -1,12 +1,16 @@
 /* Floating, soft-cornered panel ("variant B" in the design exports) and the panel hide tab. */
 
 /* ---- floating panel (A, B) ---- */
+/* 500px where there's room, a share of the width once the window is narrower than ~1090px, with no step between.
+   Everything the panel pushes aside (the hide tab, the map's overlays) is offset from it, and GuideMap.pad()
+   measures the panel to fit routes beside it, so this is the only place the width is stated. */
+html.float{--panel-w:min(500px,46vw)}
 html.float body{display:block;position:relative}
 html.float #mapwrap{position:absolute;inset:0}
-html.float #side{position:absolute;top:16px;left:16px;max-height:calc(100% - 32px);width:500px;z-index:1100;border-right:0}
+html.float #side{position:absolute;top:16px;left:16px;max-height:calc(100% - 32px);width:var(--panel-w);z-index:1100;border-right:0}
 html.float .view{padding:44px 40px 56px}
-html.float .legend,html.float .mapchip{left:548px}
-html.float .leaflet-bottom.leaflet-left{left:524px}
+html.float .legend,html.float .mapchip{left:calc(var(--panel-w) + 48px)}
+html.float .leaflet-bottom.leaflet-left{left:calc(var(--panel-w) + 24px)}
 
 /* ---- B · soft: radius, no rules, spacing ---- */
 html[data-v="B"] #side{background:var(--panel);border:0;border-radius:22px;box-shadow:0 2px 6px rgba(42,36,29,.06),0 32px 70px -30px rgba(42,36,29,.5)}
@@ -57,7 +61,7 @@ html[data-v="B"] .legend i{border-radius:2px}
 
 /* ---- panel hide (A, B) ---- */
 .ptab{display:none}
-html.float .ptab{all:unset;cursor:pointer;position:absolute;z-index:1101;top:72px;left:516px;transform:none;display:flex;align-items:center;justify-content:center;width:22px;height:56px;background:var(--page);color:var(--ink-2);border:1px solid rgba(42,36,29,.22);border-left:0;font:500 15px/1 var(--sans);box-shadow:8px 0 24px -12px rgba(42,36,29,.4);transition:left .5s cubic-bezier(.2,.7,.2,1),color .2s,width .2s}
+html.float .ptab{all:unset;cursor:pointer;position:absolute;z-index:1101;top:72px;left:calc(var(--panel-w) + 16px);transform:none;display:flex;align-items:center;justify-content:center;width:22px;height:56px;background:var(--page);color:var(--ink-2);border:1px solid rgba(42,36,29,.22);border-left:0;font:500 15px/1 var(--sans);box-shadow:8px 0 24px -12px rgba(42,36,29,.4);transition:left .5s cubic-bezier(.2,.7,.2,1),color .2s,width .2s}
 html.float .ptab:hover{color:var(--ink)}
 html.float .ptab:focus-visible{outline:1px solid var(--route);outline-offset:2px}
 html.float .ptab .ptab-show{display:none;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;writing-mode:vertical-rl;transform:rotate(180deg)}
@@ -71,17 +75,10 @@ html.float.phide .legend,html.float.phide .mapchip{left:52px}
 html.float.phide .leaflet-bottom.leaflet-left{left:28px}
 html.float .legend,html.float .mapchip,html.float .leaflet-bottom.leaflet-left{transition:left .5s cubic-bezier(.2,.7,.2,1)}
 
-/* ---- narrower windows (701–1000px): the panel takes a share of the width. --panel-w is what the map reads
-   (GuideMap.pad) to fit views beside it; registered so it computes to px. ---- */
-@property --panel-w{syntax:"<length>";inherits:true;initial-value:0px}
-html.float{--panel-w:500px}
-@media (max-width:1000px){
-  html.float{--panel-w:46vw}
-  html.float #side{width:var(--panel-w)}
-  html.float .ptab{left:calc(var(--panel-w) + 16px)}
-  html.float .legend,html.float .mapchip{left:calc(var(--panel-w) + 48px)}
-  html.float .leaflet-bottom.leaflet-left{left:calc(var(--panel-w) + 24px)}
-  /* the narrower panel: tighter gutters and a smaller thumbnail so a row's stats stay on one line */
+/* ---- narrower windows (701–1100px): the panel compacts. This starts just above the width where --panel-w
+   begins to shrink, so the ride names never meet a narrowing panel at their full size and wrap. ---- */
+@media (max-width:1100px){
+  /* tighter gutters and a smaller thumbnail so a row's name and stats stay on one line */
   html.float .view{padding:36px 28px 56px}
   html.float .hdr .r{gap:14px}
   html.float #count-list{white-space:nowrap}
