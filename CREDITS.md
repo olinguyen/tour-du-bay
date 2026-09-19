@@ -10,10 +10,20 @@ public domain in the United States; the USGS asks that they be credited, which t
 Tilezen project's documentation, including its
 [attribution page](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) and
 [data sources](https://github.com/tilezen/joerd/blob/master/docs/data-sources.md), is MIT licensed. No AWS or Mapzen
-key is used; tiles are requested directly and shaded with a Horn hillshade in `src/map/terrain.ts`.
+key is used; tiles are requested directly. The same tileset serves twice, as separate sources declared in
+`src/map/style.ts`: one MapLibre shades into the map's paper palette as a `hillshade` layer, the other it reads as
+the elevation mesh behind the 3D view.
 
 **Water.** `src/data/bay-water.json` holds the Pacific, San Francisco Bay, San Pablo Bay, Suisun Bay and the larger
 lakes and reservoirs inside the map's bounds, built by `scripts/fetch-water.mjs` from OpenStreetMap
 (`natural=coastline` ways, `natural=water` ways and multipolygon relations) via the Overpass API, simplified to about
 50 m and keeping water bodies of 0.2 km² and up (the script's defaults). Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the
 [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/) (ODbL). Retrieved September 13, 2026.
+
+## Renderer
+
+**MapLibre GL JS.** The map is drawn by [MapLibre GL JS](https://maplibre.org/), a community fork of Mapbox GL JS,
+under the [3-Clause BSD licence](https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt). It is an ordinary
+npm dependency, so its licence ships with the package. The style in `src/map/style.ts` is written from scratch against
+the two elevation sources and the local water polygons above: the map loads no vector-tile basemap, sprite sheet or
+glyph server, and so makes no request to any hosted map service.

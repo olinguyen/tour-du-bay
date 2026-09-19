@@ -10,7 +10,7 @@ html.float #mapwrap{position:absolute;inset:0}
 html.float #side{position:absolute;top:16px;left:16px;max-height:calc(100% - 32px);width:var(--panel-w);z-index:1100;border-right:0}
 html.float .view{padding:44px 40px 56px}
 html.float .legend,html.float .mapchip{left:calc(var(--panel-w) + 48px)}
-html.float .leaflet-bottom.leaflet-left{left:calc(var(--panel-w) + 24px)}
+html.float .maplibregl-ctrl-bottom-left{left:calc(var(--panel-w) + 24px)}
 
 /* ---- B · soft: radius, no rules, spacing ---- */
 html[data-v="B"] #side{background:var(--panel);border:0;border-radius:22px;box-shadow:0 2px 6px rgba(42,36,29,.06),0 32px 70px -30px rgba(42,36,29,.5)}
@@ -56,7 +56,8 @@ html[data-v="B"] .also button{border-bottom:0;padding:13px 14px;margin:0 -14px;w
 html[data-v="B"] .also button:hover{background:rgba(42,36,29,.055)}
 html[data-v="B"] .pager{border-top:0;background:rgba(42,36,29,.055);border-radius:18px;padding:22px 22px 24px}
 html[data-v="B"] .mapchip{border:0;border-radius:999px;padding:11px 20px 11px 16px;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
-html[data-v="B"] .leaflet-tooltip.ride-tip{border:0;border-radius:14px;padding:10px 14px 11px;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
+html[data-v="B"] .viewmode{border:0;border-radius:999px;overflow:hidden;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
+html[data-v="B"] .maplibregl-popup.ride-tip .maplibregl-popup-content{border:0;border-radius:14px;padding:10px 14px 11px;box-shadow:0 12px 30px -12px rgba(42,36,29,.5)}
 html[data-v="B"] .legend i{border-radius:2px}
 
 /* ---- panel hide (A, B) ---- */
@@ -72,8 +73,8 @@ html.float.phide .ptab{left:0;width:30px;height:120px;border-left:0}
 html.float.phide .ptab .ptab-hide{display:none}
 html.float.phide .ptab .ptab-show{display:block}
 html.float.phide .legend,html.float.phide .mapchip{left:52px}
-html.float.phide .leaflet-bottom.leaflet-left{left:28px}
-html.float .legend,html.float .mapchip,html.float .leaflet-bottom.leaflet-left{transition:left .5s cubic-bezier(.2,.7,.2,1)}
+html.float.phide .maplibregl-ctrl-bottom-left{left:28px}
+html.float .legend,html.float .mapchip,html.float .maplibregl-ctrl-bottom-left{transition:left .5s cubic-bezier(.2,.7,.2,1)}
 
 /* ---- narrower windows (701–1100px): the panel compacts. This starts just above the width where --panel-w
    begins to shrink, so the ride names never meet a narrowing panel at their full size and wrap. ---- */
