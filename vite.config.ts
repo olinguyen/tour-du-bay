@@ -1,10 +1,9 @@
 import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
+import { CSP } from './src/lib/csp';
 
-// Added at build time only: the dev server injects an inline react-refresh preamble that a script-src 'self' policy
-// would block. Leaflet and React set inline styles; terrain tiles come from the DEM host; the CSS has a data: SVG grain.
-const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.amazonaws.com; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'";
+// Added at build time only: the dev server injects an inline react-refresh preamble that a script-src 'self'
+// policy would block. The policy itself lives in src/lib/csp.ts so it can be tested without loading this file.
 const csp = (): PluginOption => ({
   name: 'csp-meta',
   apply: 'build',
