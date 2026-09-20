@@ -34,6 +34,8 @@ export interface RideInput {
   waypoints?: Waypoint[];
   /** for point-to-point rides; loops omit it */
   finish?: string;
+  /** the start's name where it is lettered on the map, when the full one is too long to sit beside the dot */
+  startLabel?: string;
   /**
    * a second way to start: ride in from here and back, on legs planned in scripts/route-plans.json under the
    * itinerary's `transit`. A station when there is one near enough (`transit` names the system, e.g. 'BART'), or the

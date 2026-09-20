@@ -88,7 +88,7 @@ export function tripIn(r: Ride): Ride | null {
     const first = it.transit.findIndex(id => it.parts.includes(id));
     const last = it.transit.length - 1 - [...it.transit].reverse().findIndex(id => it.parts.includes(id));
     const input: RideInput = {
-      ...r, start: r.from.start, transit: r.from.transit, finish: undefined,
+      ...r, start: r.from.start, startLabel: undefined, transit: r.from.transit, finish: undefined,
       hours: scaleHours(r.hours, ridingTime(trip.profile) / ridingTime(own.profile)),
       photos: r.photos.map(ph => ({ ...ph, f: f(ph.f) })),
       waypoints: r.waypoints?.map(w => ({ ...w, f: f(w.f) })),

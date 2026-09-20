@@ -328,9 +328,13 @@ export class GuideMap {
     const t = this.ride ?? (hot && tripFor(hot, rideIn.get()));
     if (!t || !(t.approach || (rideIn.get() && t.transit))) return;
     const kind = `${this.ride ? '' : ' hint'}${t.approach ? (t.transit ? ' transit' : '') : ' bare'}`;
-    // across from the ride's own name, which a ride that begins at its station shows beside the same dot
-    const side = t.approach || t.labelSide === 'l' ? '' : ' class="l"';
-    const html = `<div class="from-dot${kind}" data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(place(t.start))}</em></div>`;
+    // a ride that begins at its station shows its own name beside the same dot: the station's goes across from it.
+    // A station ridden in from is an end of the trip, and the view is fitted to the trip: lettered outwards from
+    // its eastern edge, the name would run off the map or under the controls, so it is lettered inwards
+    const [[, w], [, e]] = bounds([t.route]);
+    const left = t.approach ? t.route[0][1] > (w + e) / 2 : t.labelSide !== 'l';
+    const side = left ? ' class="l"' : '';
+    const html = `<div class="from-dot${kind}" data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(t.startLabel ?? place(t.start))}</em></div>`;
     this.fromDot = marker(this.map, t.route[0], html);
   }
 

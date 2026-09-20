@@ -125,7 +125,7 @@ export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onB
       </p>
       {r.approach && (
         <p className="ridein-note mono">
-          {dist(r.approach.outMi, u)} {distUnit(u)} in from {from}, {dist(r.approach.backMi, u)} {distUnit(u)} back
+          {dist(r.approach.outMi, u)} {distUnit(u)} in from {r.transit ? '' : 'the '}{from}, {dist(r.approach.backMi, u)} {distUnit(u)} back
         </p>
       )}
       <div className="facts">

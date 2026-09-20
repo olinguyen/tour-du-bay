@@ -126,7 +126,7 @@ export const RIDE_INPUTS: RideInput[] = [
     ],
   },
 
-  { slug: "grizzly-peak", name: "Grizzly Peak & Skyline", area: "East Bay", start: "Downtown Berkeley BART", transit: "BART", labelSide: "l",
+  { slug: "grizzly-peak", name: "Grizzly Peak & Skyline", area: "East Bay", start: "Downtown Berkeley BART", startLabel: "Berkeley BART", transit: "BART", labelSide: "l",
     hours: "2 h",
     tagline: "The after-work ride. Bay lights on the way down.",
     notes: [
