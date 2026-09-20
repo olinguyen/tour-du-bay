@@ -698,12 +698,13 @@ export class GuideMap {
       return { top: 40, left: 24, right: 24, bottom: TOGGLE_PX };
     }
     const f = this.panelPx();
-    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 20 };
+    // the legend and the key strip take the bottom band; a ride's fit keeps 110 px clear of it, the others a little
+    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 60 };
     if (kind === 'ride') return { top: 90, left: 70 + f, right: 70, bottom: 110 };
     // a region shows its rides' names; one lettered to the left of its dot (labelSide 'l') needs the room to be read
     // beside the panel rather than under it
     const lettered = this.area && ridesIn(this.area).some(r => r.labelSide === 'l') ? LEFT_LABEL_PX : 0;
-    return { top: 70, left: 70 + f + lettered, right: 70, bottom: 70 };
+    return { top: 70, left: 70 + f + lettered, right: 70, bottom: 100 };
   }
 
   /** map px the floating panel covers along the left edge, gap included; 0 when it is hidden or does not float */
