@@ -188,6 +188,13 @@ function segTime(d: number, rise: number): number {
   return rise / (d * FT_PER_MI) < -0.03 ? d / 22 : d / 13;
 }
 
+/** estimated riding time (hours) over a whole profile, before any calibration to the ride's stated hours */
+export function ridingTime(p: ProfilePoint[]): number {
+  let t = 0;
+  for (let k = 1; k < p.length; k++) t += segTime(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]);
+  return t;
+}
+
 /** legs between waypoints with distance, gain, loss (slices of one hysteresis pass, so they add up to the ride's totals) and time; times are calibrated to the ride's stated hours when given */
 export function legs(r: Ride): RouteCard {
   const wp = waypoints(r), p = r.profile, tot = p[p.length - 1][0], L: Leg[] = [];

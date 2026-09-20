@@ -4,8 +4,9 @@
 //
 //   scripts/route-data.json        the full planned geometry and its provenance — this tool's own record, read
 //                                  back on the next run so unchanged segments are never requested again
-//   src/data/routes.generated.ts   what the page downloads: the same routes prepared for drawing (simplified to
-//                                  3 m, resampled every 25 m) and delta-encoded, about a third of the size
+//   src/data/routes.generated.ts   what the page downloads: every part prepared for drawing (simplified to 3 m,
+//                                  resampled every 25 m) and delta-encoded, about a third of the size, with each
+//                                  ride's itineraries as lists of part ids; the page joins the parts into trips
 //
 // Node 22.18+ (it imports src/lib/prepare.ts directly, relying on Node's TypeScript stripping):
 // node scripts/prepare-routes.mjs [--check | segment-id ...]
@@ -155,40 +156,51 @@ export async function prepareRoutes({
   return routes;
 }
 
-/** Concatenate each itinerary's parts into one ride; a retained ride keeps its original preparation date. */
+/**
+ * Concatenate each itinerary's parts into one ride, and the transit itinerary's into the ride in from the station
+ * when the plan has one; a retained ride keeps its original preparation date.
+ */
 function assemble(plans, segments, previous) {
   const routes = {};
   for (const [slug, itinerary] of Object.entries(plans.itineraries)) {
-    const parts = itinerary.parts.map(id => {
-      if (!segments[id]) throw new Error(`${slug}: missing segment ${id}; finish generating before publishing`);
-      return { id, ...segments[id] };
-    });
-    const source = {
-      service: 'BRouter',
-      profile: plans.profile,
-      prepared: parts.reduce((latest, part) => (part.generatedAt > latest ? part.generatedAt : latest), ''),
-      start: itinerary.startId,
-      via: parts.flatMap(part => part.via.map(latLng)),
-      parts: parts.map(part => ({
-        id: part.id, role: part.role, via: part.via.map(latLng), inputs: part.inputs, count: part.coordinates.length,
-        distanceMeters: part.distanceMeters, ascentMeters: part.ascentMeters, generatedAt: part.generatedAt,
-      })),
-    };
-    if (itinerary.references) source.references = itinerary.references;
-    const points = parts.flatMap(part => part.coordinates);
-    const old = previous[slug];
-    if (old && isDeepStrictEqual(old.points, points) && isDeepStrictEqual({ ...old.source, prepared: source.prepared }, source)) {
-      source.prepared = old.source.prepared;
-    }
-    routes[slug] = { source, points };
+    const route = record(slug, plans, segments, itinerary, previous[slug]);
+    if (itinerary.transit) route.transit = record(slug, plans, segments, itinerary.transit, previous[slug]?.transit);
+    routes[slug] = route;
   }
   return routes;
 }
 
+function record(slug, plans, segments, itinerary, old) {
+  const parts = itinerary.parts.map(id => {
+    if (!segments[id]) throw new Error(`${slug}: missing segment ${id}; finish generating before publishing`);
+    return { id, ...segments[id] };
+  });
+  const source = {
+    service: 'BRouter',
+    profile: plans.profile,
+    prepared: parts.reduce((latest, part) => (part.generatedAt > latest ? part.generatedAt : latest), ''),
+    start: itinerary.startId,
+    via: parts.flatMap(part => part.via.map(latLng)),
+    parts: parts.map(part => ({
+      id: part.id, role: part.role, via: part.via.map(latLng), inputs: part.inputs, count: part.coordinates.length,
+      distanceMeters: part.distanceMeters, ascentMeters: part.ascentMeters, generatedAt: part.generatedAt,
+    })),
+  };
+  if (itinerary.references) source.references = itinerary.references;
+  const points = parts.flatMap(part => part.coordinates);
+  if (old && isDeepStrictEqual(old.points, points) && isDeepStrictEqual({ ...old.source, prepared: source.prepared }, source)) {
+    source.prepared = old.source.prepared;
+  }
+  return { source, points };
+}
+
+/** a ride's published itineraries: the ride as planned, then the ride in from the station when it has one */
+const records = route => (route.transit ? [route, route.transit] : [route]);
+
 /** Recover per-segment geometry from a published file: each part's coordinates are a run of `count` points. */
 function publishedSegments(routes) {
   const segments = {};
-  for (const route of Object.values(routes)) {
+  for (const route of Object.values(routes).flatMap(records)) {
     let offset = 0;
     for (const part of route.source.parts) {
       const { id, count, ...rest } = part;
@@ -203,29 +215,43 @@ function publishedSegments(routes) {
 
 /** This tool's own record: the full planned geometry and where it came from. */
 function serializeData(routes) {
+  const fields = (route, indent) => `${indent}"source": ${JSON.stringify(route.source)},\n${indent}"points": [${route.points.map(point => JSON.stringify(point)).join(',')}]`;
   const lines = Object.entries(routes).map(([slug, route]) => {
-    const points = route.points.map(point => JSON.stringify(point)).join(',');
-    return `  ${JSON.stringify(slug)}: {\n    "source": ${JSON.stringify(route.source)},\n    "points": [${points}]\n  }`;
+    const transit = route.transit ? `,\n    "transit": {\n${fields(route.transit, '      ')}\n    }` : '';
+    return `  ${JSON.stringify(slug)}: {\n${fields(route, '    ')}${transit}\n  }`;
   });
   return `{\n${lines.join(',\n')}\n}\n`;
 }
 
-/** What the page downloads: the same routes prepared for drawing and delta-encoded (src/data/routeCodec.ts). */
+/**
+ * What the page downloads: every part prepared for drawing and delta-encoded (src/data/routeCodec.ts), once, however
+ * many rides share it, and each ride's itineraries as lists of part ids for the page to join.
+ */
 export function serializeModule(routes, profile) {
-  const encoded = prepareCollection(Object.fromEntries(Object.entries(routes).map(([slug, route]) => [slug, route.points])));
-  const lines = Object.entries(encoded).map(([slug, route]) =>
-    `  ${JSON.stringify(slug)}: { "span": ${route.span}, "coords": [${route.coords}], "cum": [${route.cum}], "ele": [${route.ele}] }`);
+  const parts = publishedSegments(routes);
+  const encoded = prepareCollection(Object.fromEntries(Object.entries(parts).map(([id, part]) => [id, part.coordinates])));
+  const partLines = Object.entries(encoded).map(([id, route]) =>
+    `  ${JSON.stringify(id)}: { "span": ${route.span}, "coords": [${route.coords}], "cum": [${route.cum}], "ele": [${route.ele}] }`);
+  const ids = route => JSON.stringify(route.source.parts.map(part => part.id));
+  const rideLines = Object.entries(routes).map(([slug, route]) =>
+    `  ${JSON.stringify(slug)}: { "parts": ${ids(route)}${route.transit ? `, "transit": ${ids(route.transit)}` : ''} }`);
   return `// GENERATED by scripts/prepare-routes.mjs — do not edit
 // Planned, road-following routes from BRouter (profile "${profile}") over OpenStreetMap ways; elevation is BRouter's
 // terrain model, so bridges, tunnels and road cuts follow the ground rather than the road. The planned geometry and
-// its provenance live in scripts/route-data.json; what is here is that geometry prepared for the page — simplified
-// to 3 m for drawing, resampled every 25 m for the profile — and written as differences between scaled integers,
-// which src/data/routeCodec.ts decodes. Regenerate with \`npm run routes\` after editing scripts/route-plans.json;
-// \`node scripts/prepare-routes.mjs --check\` validates both files offline.
-import type { EncodedRoute } from './routeCodec';
+// its provenance live in scripts/route-data.json; what is here is that geometry prepared for the page — each part
+// simplified to 3 m for drawing, resampled every 25 m for the profile — and written as differences between scaled
+// integers, which src/data/routeCodec.ts decodes and joins into each ride's trips. Regenerate with \`npm run routes\`
+// after editing scripts/route-plans.json; \`node scripts/prepare-routes.mjs --check\` validates both files offline.
+import type { EncodedRoute, Itinerary } from './routeCodec';
 
-export const ROUTES: Record<string, EncodedRoute> = {
-${lines.join(',\n')}
+/** every planned part, keyed by its id in the plan */
+export const PARTS: Record<string, EncodedRoute> = {
+${partLines.join(',\n')}
+};
+
+/** each ride's parts in riding order, and the same ride in from its alternative start when it has one */
+export const ROUTES: Record<string, Itinerary> = {
+${rideLines.join(',\n')}
 };
 `;
 }
@@ -244,11 +270,10 @@ function parseData(text) {
   try { routes = JSON.parse(text); }
   catch (error) { throw new Error('Unreadable published route file: invalid JSON', { cause: error }); }
   if (!isRecord(routes)) throw new Error('Invalid published route file');
+  const valid = route => isRecord(route) && isRecord(route.source) && Array.isArray(route.source.parts) && Array.isArray(route.points)
+    && route.source.parts.every(part => isRecord(part) && typeof part.id === 'string' && Array.isArray(part.via));
   for (const [slug, route] of Object.entries(routes)) {
-    if (!isRecord(route) || !isRecord(route.source) || !Array.isArray(route.source.parts) || !Array.isArray(route.points)
-      || !route.source.parts.every(part => isRecord(part) && typeof part.id === 'string' && Array.isArray(part.via))) {
-      throw new Error(`${slug}: invalid published route`);
-    }
+    if (!valid(route) || (route.transit !== undefined && !valid(route.transit))) throw new Error(`${slug}: invalid published route`);
   }
   return routes;
 }
@@ -367,14 +392,26 @@ function validateItineraries(data) {
     if (typeof start.name !== 'string' || !start.name.trim()) throw new Error(`${id}: missing start name`);
   }
   for (const [slug, itinerary] of Object.entries(data.itineraries)) {
-    if (!Array.isArray(itinerary?.parts) || !itinerary.parts.length) throw new Error(`${slug}: empty or missing itinerary parts`);
-    if (!Object.hasOwn(data.starts, itinerary.startId)) throw new Error(`${slug}: missing start ${itinerary.startId}`);
-    for (const id of itinerary.parts) {
-      if (typeof id !== 'string' || !Object.hasOwn(data.segments, id)) throw new Error(`${slug}: missing segment ${id}`);
-    }
+    validateItinerary(data, slug, itinerary);
     if (itinerary.references !== undefined && !(Array.isArray(itinerary.references) && itinerary.references.every(url => typeof url === 'string'))) {
       throw new Error(`${slug}: references must be a list of URLs`);
     }
+    if (itinerary.transit === undefined) continue;
+    // The ride in from the station is the same ride with legs around it: the page places photos and waypoints on the
+    // trip by finding the part they sit on, so every part of the ride itself must be ridden.
+    validateItinerary(data, `${slug} transit`, itinerary.transit);
+    const unknown = Object.keys(itinerary.transit).filter(key => !['startId', 'parts'].includes(key));
+    if (unknown.length) throw new Error(`${slug} transit: unexpected ${unknown.join(', ')}; a transit itinerary has only startId and parts`);
+    const missing = itinerary.parts.filter(id => !itinerary.transit.parts.includes(id));
+    if (missing.length) throw new Error(`${slug} transit: must ride every part of the ride itself; missing ${missing.join(', ')}`);
+  }
+}
+
+function validateItinerary(data, label, itinerary) {
+  if (!Array.isArray(itinerary?.parts) || !itinerary.parts.length) throw new Error(`${label}: empty or missing itinerary parts`);
+  if (!Object.hasOwn(data.starts, itinerary.startId)) throw new Error(`${label}: missing start ${itinerary.startId}`);
+  for (const id of itinerary.parts) {
+    if (typeof id !== 'string' || !Object.hasOwn(data.segments, id)) throw new Error(`${label}: missing segment ${id}`);
   }
 }
 
@@ -387,31 +424,38 @@ function validateCollection(routes, plans, inputs, vias, catalog, log) {
   for (const [slug, route] of Object.entries(routes)) {
     const itinerary = plans.itineraries[slug];
     if (!itinerary) throw new Error(`${slug}: route has no itinerary; remove it from the published file`);
-    const { source } = route;
-    if (source.start !== itinerary.startId) throw new Error(`${slug}: start differs from the plan`);
-    if (!isDeepStrictEqual(source.references, itinerary.references)) throw new Error(`${slug}: references differ from the plan`);
-    if (!isDeepStrictEqual(source.parts.map(part => part.id), itinerary.parts)) throw new Error(`${slug}: parts differ from the plan; regenerate`);
-    if (!isDeepStrictEqual(source.via, source.parts.flatMap(part => part.via))) throw new Error(`${slug}: via list does not match its parts`);
-    if (typeof source.prepared !== 'string' || !source.prepared) throw new Error(`${slug}: missing preparation date`);
-    let offset = 0, previous = null;
-    for (const part of source.parts) {
-      const count = Number.isInteger(part.count) && part.count >= 0 ? part.count : 0;
-      const coordinates = route.points.slice(offset, offset + count);
-      offset += count;
-      validateSegment(part.id, { ...part, coordinates });
-      if (!Object.hasOwn(plans.segments, part.id)) throw new Error(`${part.id}: segment has no plan; regenerate ${slug}`);
-      if (!sameInputs({ ...part, via: part.via.map(latLng) }, inputs, vias[part.id])) throw new Error(`${part.id}: stale geometry (waypoints or routing inputs); regenerate this part`);
-      if (part.role !== plans.segments[part.id].role) throw new Error(`${part.id}: role differs from the plan`);
-      if (previous && distanceMeters(previous.coordinates.at(-1), coordinates[0]) > JOIN_M) throw new Error(`${slug}: disconnected parts ${previous.id} / ${part.id}`);
-      previous = { id: part.id, coordinates };
-    }
-    if (offset !== route.points.length) throw new Error(`${slug}: part counts do not cover the published points`);
-    if (source.service !== 'BRouter' || source.profile !== inputs.profile) throw new Error(`${slug}: source differs from routing inputs`);
-    if (distanceMeters(latLng(plans.starts[itinerary.startId].coordinate), route.points[0]) > START_M) throw new Error(`${slug}: route starts too far from its named start`);
+    validateRecord(slug, route, itinerary, plans, inputs, vias);
+    if (!!route.transit !== !!itinerary.transit) throw new Error(`${slug}: transit itinerary differs from the plan; regenerate`);
+    if (route.transit) validateRecord(`${slug} transit`, route.transit, itinerary.transit, plans, inputs, vias);
   }
   for (const slug of catalog) {
     if (!Object.hasOwn(routes, slug)) throw new Error(`${slug}: ride has no planned route; add an itinerary to scripts/route-plans.json`);
   }
+}
+
+/** one published itinerary against its plan: provenance, geometry, joins, start */
+function validateRecord(slug, route, itinerary, plans, inputs, vias) {
+  const { source } = route;
+  if (source.start !== itinerary.startId) throw new Error(`${slug}: start differs from the plan`);
+  if (!isDeepStrictEqual(source.references, itinerary.references)) throw new Error(`${slug}: references differ from the plan`);
+  if (!isDeepStrictEqual(source.parts.map(part => part.id), itinerary.parts)) throw new Error(`${slug}: parts differ from the plan; regenerate`);
+  if (!isDeepStrictEqual(source.via, source.parts.flatMap(part => part.via))) throw new Error(`${slug}: via list does not match its parts`);
+  if (typeof source.prepared !== 'string' || !source.prepared) throw new Error(`${slug}: missing preparation date`);
+  let offset = 0, previous = null;
+  for (const part of source.parts) {
+    const count = Number.isInteger(part.count) && part.count >= 0 ? part.count : 0;
+    const coordinates = route.points.slice(offset, offset + count);
+    offset += count;
+    validateSegment(part.id, { ...part, coordinates });
+    if (!Object.hasOwn(plans.segments, part.id)) throw new Error(`${part.id}: segment has no plan; regenerate ${slug}`);
+    if (!sameInputs({ ...part, via: part.via.map(latLng) }, inputs, vias[part.id])) throw new Error(`${part.id}: stale geometry (waypoints or routing inputs); regenerate this part`);
+    if (part.role !== plans.segments[part.id].role) throw new Error(`${part.id}: role differs from the plan`);
+    if (previous && distanceMeters(previous.coordinates.at(-1), coordinates[0]) > JOIN_M) throw new Error(`${slug}: disconnected parts ${previous.id} / ${part.id}`);
+    previous = { id: part.id, coordinates };
+  }
+  if (offset !== route.points.length) throw new Error(`${slug}: part counts do not cover the published points`);
+  if (source.service !== 'BRouter' || source.profile !== inputs.profile) throw new Error(`${slug}: source differs from routing inputs`);
+  if (distanceMeters(latLng(plans.starts[itinerary.startId].coordinate), route.points[0]) > START_M) throw new Error(`${slug}: route starts too far from its named start`);
 }
 
 /** metres between two [lat, lng(, …)] points */

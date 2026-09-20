@@ -34,6 +34,12 @@ export interface RideInput {
   waypoints?: Waypoint[];
   /** for point-to-point rides; loops omit it */
   finish?: string;
+  /**
+   * a second way to start: ride in from here and back, on legs planned in scripts/route-plans.json under the
+   * itinerary's `transit`. A station when there is one near enough (`transit` names the system, e.g. 'BART'), or the
+   * Panhandle for a ride reached through the city.
+   */
+  from?: { start: string; transit?: string };
 }
 
 /** A ride with its planned geometry (src/data/routes.generated.ts) prepared: everything shown derives from it. */
@@ -51,6 +57,8 @@ export interface Ride extends RideInput {
   maxElev: number;
   /** 1-based position in the guide, shown on start dots and thumbnails */
   num: number;
+  /** set on the ride in from `from`: the legs that are not the ride itself, drawn lighter, and how long each way is */
+  approach?: { lines: LatLng[][]; outMi: number; backMi: number };
 }
 
 export interface MapLabel {
