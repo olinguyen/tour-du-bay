@@ -45,17 +45,33 @@ export const GG = {
 export const BRIDGE_COLOR = '#d2452b';
 
 const M_PER_DEG_LAT = 111_320;
-const mPerDegLng = M_PER_DEG_LAT * Math.cos((MID[0] * Math.PI) / 180);
-const rad = (BEARING * Math.PI) / 180;
-/** unit vectors in metres (east, north): along the bridge towards Marin, and across it to the right (east) */
-export const ALONG = [Math.sin(rad), Math.cos(rad)] as const;
-export const ACROSS = [ALONG[1], -ALONG[0]] as const;
 
-/** a point on the bridge, in metres along the axis from mid-span and across it, as [lng, lat] */
-export function at(along: number, across: number): [number, number] {
-  const e = along * ALONG[0] + across * ACROSS[0], n = along * ALONG[1] + across * ACROSS[1];
-  return [MID[1] + e / mPerDegLng, MID[0] + n / M_PER_DEG_LAT];
+/** a landmark's own frame: metres along its axis (x, towards `bearing`) and across it to the right (z), from an origin */
+export interface Frame {
+  /** the origin as [lng, lat], for MapLibre */
+  origin: [number, number];
+  /** a point in the frame as [lng, lat] */
+  at(x: number, z: number): [number, number];
+  /** the turn about the vertical that takes a model built in this frame into map space (x east, y up, z south) */
+  rotationY: number;
 }
+
+export function frame(lat: number, lng: number, bearing: number): Frame {
+  const mPerDegLng = M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+  const rad = (bearing * Math.PI) / 180;
+  // unit vectors in metres (east, north): along the axis, and across it to the right
+  const along = [Math.sin(rad), Math.cos(rad)], across = [along[1], -along[0]];
+  return {
+    origin: [lng, lat],
+    at: (x, z) => [lng + (x * along[0] + z * across[0]) / mPerDegLng, lat + (x * along[1] + z * across[1]) / M_PER_DEG_LAT],
+    rotationY: Math.atan2(along[1], along[0]),
+  };
+}
+
+/** the bridge's frame: x along the axis from mid-span towards Marin, z across it to the east */
+export const BRIDGE = frame(MID[0], MID[1], BEARING);
+/** a point on the bridge, in metres along the axis from mid-span and across it, as [lng, lat] */
+export const at = BRIDGE.at;
 
 /** height of a main cable above the water at `x` metres from mid-span */
 export function cableHeight(x: number): number {
