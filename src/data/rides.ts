@@ -8,6 +8,8 @@
 //   from:{start, transit}  a second way to start: ride in from here and back, on legs the plan lists under the
 //                          itinerary's `transit`. The nearest station (transit: 'BART' or 'Caltrain'), or the
 //                          Panhandle for the Marin rides, which are reached through the city.
+//                          `via` names where the way in meets the ride when that is not the ride's own start
+//                          (Mt Tam is joined at Mill Valley, not Fairfax), so the route card can say so.
 //   hours                  stated riding time; leg times are calibrated to it. Distance and climbing are measured.
 import type { RideInput, MapLabel } from './types';
 
@@ -38,7 +40,7 @@ export const RIDE_INPUTS: RideInput[] = [
   },
 
   { slug: "tam-alpine-dam", name: "Mt Tam via Alpine Dam", area: "Marin", start: "Fairfax, the Parkade",
-    from: { start: "Panhandle, Stanyan entrance" }, hours: "4–5 h",
+    from: { start: "Panhandle, Stanyan entrance", via: "Mill Valley" }, hours: "4–5 h",
     tagline: "The big Marin day. Lake, ridge, summit, ocean air.",
     notes: [
       "Bolinas–Fairfax Road has rough pavement after the lake. Wider tires help.",

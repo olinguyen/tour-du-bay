@@ -140,17 +140,28 @@ export function steepDescents(p: ProfilePoint[], maxGrade = -0.06, minLen = 0.5)
   return stretches(p, -1, -maxGrade, minLen);
 }
 
-/** Named points along the route. Candidates carry a priority so the better name wins when two fall within tol of each other. */
+/**
+ * Named points along the route. Candidates carry a priority so the better name wins when two fall within tol of each other.
+ * Riding in from a station, the card is still the ride's: the way in and the way back are one leg each, to and from
+ * the ride's own start, the climbs counted are the ride's, and stops merge at the spacing they do on the ride
+ * itself rather than one stretched by the longer trip.
+ */
 export function waypoints(r: Ride, tol = 0.05): Waypoint[] {
+  const ap = r.approach, tot = r.lengthMi;
+  const [a, b] = ap ? [ap.outMi / tot, 1 - ap.backMi / tot] : [0, 1];
+  const onRide = (f: number) => f >= a && f <= b;
+  tol *= b - a;
   const c: (Waypoint & { pr: number })[] = [
     { f: 0, name: place(r.start), pr: 9 },
     { f: 1, name: place(r.finish || r.start), pr: 9 },
   ];
+  if (ap) c.push(...ap.ends.map(w => ({ ...w, pr: 9 })));
   if (r.waypoints?.length) c.push(...r.waypoints.map(w => ({ f: w.f, name: w.name, pr: 8 })));
   else {
-    c.push({ f: highPoint(r).f, name: 'High point', pr: 5 });
-    climbs(r).forEach((cl, i) =>
-      c.push({ f: cl.a, name: `Foot of climb ${i + 1}`, pr: 2 }, { f: cl.b, name: `Top of climb ${i + 1}`, pr: 3 }),
+    const hp = highPoint(r).f;
+    if (onRide(hp)) c.push({ f: hp, name: 'High point', pr: 5 });
+    climbs(r).filter(cl => onRide(cl.b)).forEach((cl, i) =>
+      c.push({ f: Math.max(cl.a, a), name: `Foot of climb ${i + 1}`, pr: 2 }, { f: cl.b, name: `Top of climb ${i + 1}`, pr: 3 }),
     );
   }
   r.photos.forEach(ph => c.push({ f: ph.f, name: place(ph.cap), pr: 6 }));

@@ -129,3 +129,28 @@ describe.each(trips)('%s', (_name, ride, published) => {
     a.descents.forEach((d, i) => sameDrawing(d, b.descents[i]));
   });
 });
+
+// The trip in from a station is the same ride with a way in and a way back: its route card must stay the ride's.
+describe.each(RIDES.flatMap(r => (rideIn(r) ? [[r.slug, r, rideIn(r)!] as const] : [])))('%s ridden in to', (_slug, ride, trip) => {
+  const numbered = /climb \d+$/;
+  const [own, whole] = [legs(ride), legs(trip)];
+
+  it('spends one leg on the way in and one on the way back', () => {
+    const [first, last] = [whole.legs[0], whole.legs[whole.legs.length - 1]];
+    expect(first.mi).toBeCloseTo(trip.approach!.outMi, 6);
+    expect(last.mi).toBeCloseTo(trip.approach!.backMi, 6);
+  });
+
+  it('keeps every named stop of the ride, the ride\'s own start included', () => {
+    const names = new Set(whole.wp.map(w => w.name));
+    for (const w of own.wp) if (!numbered.test(w.name)) expect(names).toContain(w.name);
+  });
+
+  it('keeps every leg of the ride that runs between two named stops, mile for mile', () => {
+    const miles = new Map(whole.legs.map(l => [`${l.from}→${l.to}`, l.mi]));
+    for (const l of own.legs) {
+      if (numbered.test(l.from) || numbered.test(l.to) || !miles.has(`${l.from}→${l.to}`)) continue;
+      expect(miles.get(`${l.from}→${l.to}`)).toBeCloseTo(l.mi, 3);
+    }
+  });
+});

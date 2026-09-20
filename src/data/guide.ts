@@ -2,7 +2,7 @@
 // geometry (routes.generated.ts: parts, decoded and joined into each ride's trip) and the figures read off it —
 // distance, climbing, high point. A ride with a second start (`from`) has a second trip, composed on first use.
 import { pointAt } from '../lib/geo';
-import { elevationGain, ridingTime } from '../lib/route';
+import { elevationGain, place, ridingTime } from '../lib/route';
 import { AREAS, RIDE_INPUTS } from './rides';
 import { composeRoute, decodeRoute, type DecodedRoute, type Trip } from './routeCodec';
 import { PARTS, ROUTES } from './routes.generated';
@@ -99,6 +99,12 @@ export function rideIn(r: Ride): Ride | null {
         lines: it.transit.filter(id => !it.parts.includes(id)).map(id => part(id).route),
         outMi: trip.at[first],
         backMi: trip.at[trip.at.length - 1] - trip.at[last + 1],
+        ends: [
+          { f: f(0), name: place(r.start) },
+          { f: f(1), name: place(r.finish || r.start) },
+          // the way in meets the ride somewhere other than its start: name that place too, in and back
+          ...(r.from.via ? [trip.at[first], trip.at[last + 1]].map(mi => ({ f: mi / trip.at[trip.at.length - 1], name: r.from!.via! })) : []),
+        ],
       },
     };
   }
