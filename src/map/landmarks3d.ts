@@ -12,14 +12,17 @@ import {
   CatmullRomCurve3,
   CylinderGeometry,
   DirectionalLight,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   HemisphereLight,
   LineBasicMaterial,
+  LineLoop,
   LineSegments,
   type Material,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   type Object3D,
   PerspectiveCamera,
@@ -28,6 +31,7 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  TorusGeometry,
   TubeGeometry,
   Vector3,
   WebGLRenderer,
@@ -65,6 +69,10 @@ interface Mats {
   stone: Material;
   ochre: Material;
   terracotta: Material;
+  roof: Material;
+  /** the map's own water and shoreline colours, for a pond drawn as part of a landmark */
+  water: Material;
+  shore: Material;
   road: Material;
   lattice: Material;
   rope: Material;
@@ -72,6 +80,7 @@ interface Mats {
 
 function materials(): Mats {
   const shade = 'rgba(40,10,5,0.4)';
+  const css = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   // the bridge's stiffening truss: chords top and bottom, diagonals between, one panel per 25 ft
   const lattice = canvas(64, 32, c => {
     c.fillStyle = BRIDGE_COLOR;
@@ -109,9 +118,12 @@ function materials(): Mats {
     dark: new MeshLambertMaterial({ color: '#8a2a1c' }),
     white: new MeshLambertMaterial({ color: '#f4efe4' }),
     concrete: new MeshLambertMaterial({ color: '#d6cfc0' }),
-    stone: new MeshLambertMaterial({ color: '#e4dccb' }),
-    ochre: new MeshLambertMaterial({ color: '#d8c39c' }),
+    stone: new MeshLambertMaterial({ color: '#e4dccb', side: DoubleSide }),
+    ochre: new MeshLambertMaterial({ color: '#d8c39c', side: DoubleSide }),
     terracotta: new MeshLambertMaterial({ color: '#b5674b' }),
+    roof: new MeshLambertMaterial({ color: '#bcb4a5', side: DoubleSide }),
+    water: new MeshBasicMaterial({ color: css('--water', '#c6d2cb'), side: DoubleSide }),
+    shore: new LineBasicMaterial({ color: css('--coast', '#8b8574') }),
     road: new MeshLambertMaterial({ map: road }),
     lattice: new MeshLambertMaterial({ map: lattice }),
     rope: new LineBasicMaterial({ color: BRIDGE_COLOR, transparent: true, opacity: 0.45 }),
@@ -143,6 +155,13 @@ interface Kit {
   tube(pts: Vector3[], segments: number, r: number, mat: Material, pickable?: boolean): Mesh;
   /** a box whose top is narrower than its base */
   taperedBox(lx: number, h: number, lz: number, taper: number): BoxGeometry;
+  /**
+   * a profile of [radial offset, height] pairs swept along an arc of radius r about centre c, from angle a0 to a1
+   * (angles in the x-z plane, x = cos): a curved wall, a lintel, a ring
+   */
+  sweep(profile: [number, number][], c: Vector3, r: number, a0: number, a1: number, segments: number, y0: number, mat: Material, pickable?: boolean): Mesh;
+  /** a flat polygon at height y, fanned from its first point, with an outline in a second material when given */
+  sheet(outline: [number, number][], y: number, mat: Material, edge?: Material): Mesh;
 }
 
 function kit(px: number, ground: Ground, mats: Mats): Kit {
@@ -181,6 +200,42 @@ function kit(px: number, ground: Ground, mats: Mats): Kit {
       for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setXYZ(i, p.getX(i) * taper, p.getY(i), p.getZ(i) * taper);
       g.computeVertexNormals();
       return g;
+    },
+    sweep(profile, c, r, a0, a1, segments, y0, mat, pickable) {
+      const pos: number[] = [];
+      const idx: number[] = [];
+      const n = profile.length;
+      for (let i = 0; i <= segments; i++) {
+        const a = a0 + ((a1 - a0) * i) / segments;
+        for (const [d, h] of profile) pos.push(c.x + (r + d) * Math.cos(a), y0 + h, c.z + (r + d) * Math.sin(a));
+      }
+      for (let i = 0; i < segments; i++)
+        for (let j = 0; j < n - 1; j++) {
+          const p = i * n + j, q = p + n;
+          idx.push(p, q, p + 1, q, q + 1, p + 1);
+        }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return add(g, mat, 0, 0, 0, pickable);
+    },
+    sheet(outline, y, mat, edge) {
+      const pos: number[] = [];
+      const idx: number[] = [];
+      for (const [x, z] of outline) pos.push(x, y, z);
+      for (let i = 1; i < outline.length - 1; i++) idx.push(0, i + 1, i);
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      if (edge) {
+        const e = new BufferGeometry();
+        e.setAttribute('position', new Float32BufferAttribute(pos, 3));
+        geoms.push(e);
+        group.add(new LineLoop(e, edge));
+      }
+      return add(g, mat, 0, 0, 0);
     },
   };
 }
@@ -376,10 +431,21 @@ const alcatraz: Landmark = {
 };
 
 /**
- * The Palace of Fine Arts: the rotunda, its colonnade curving along the lagoon, and the exhibition hall behind. The
- * rotunda is 162 ft; the plan is scaled from photographs.
+ * The Palace of Fine Arts: the rotunda is the origin, and the colonnade and the exhibition hall behind it curve
+ * around the lagoon to its east (x north, z east). Dimensions from the National Register description as given by
+ * SAH Archipedia and the state landmark record: the rotunda an open octagon 160 ft across and 162 ft to the top of
+ * its dome on eight piers, each with a pair of Corinthian columns outside and one inside; the colonnade two rows
+ * of columns under a lintel with planter boxes on groups of four columns and the weeping maidens at their corners;
+ * the exhibition hall 135 ft wide and 45 ft at its crown, 950 ft along its face. The lagoon is sketched.
  */
-const PALACE = frame(37.80295, -122.4486, 0);
+const PALACE = frame(37.80292, -122.44843, 0);
+/** the arc the colonnade and hall follow: its centre lies out in the lagoon, so the rotunda sits at angle -90° */
+const ARC = new Vector3(0, 0, 240);
+const ARC_R = ARC.z;
+const onArc = (s: number, r: number) => {
+  const a = -Math.PI / 2 + s / ARC_R;
+  return { a, x: ARC.x + r * Math.cos(a), z: ARC.z + r * Math.sin(a) };
+};
 const palaceOfFineArts: Landmark = {
   name: 'Palace of Fine Arts',
   frame: PALACE,
@@ -387,47 +453,73 @@ const palaceOfFineArts: Landmark = {
     const u = units.get();
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
-  postcard: { center: PALACE.at(0, 40), zoom: 14, pitch: 60, bearing: -95 },
+  postcard: { center: PALACE.at(0, 70), zoom: 14, pitch: 60, bearing: -95 },
   build(k) {
-    const { w, ground, mats, cylinder, bar, add } = k;
-    const g = ground(0, 0, 20);
-    // the rotunda: eight columns, an entablature, the drum and the dome
-    const cols: Vector3[] = [];
+    const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
+    // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
+    const g = Math.max(ground(0, 0), ground(140, 45), ground(-140, 45), ground(0, -70), ground(0, 110));
+    const colR = w(0.75, 0.45);
+    const shaft = (x: number, z: number, y0: number, y1: number) => cylinder(x, z, colR, colR * 1.15, y0, y1, mats.ochre, 6);
+
+    // the rotunda: eight piers on an octagon, paired columns on a high base outside and one inside each, an arch
+    // between each pair of piers under a band, the entablature ring, the attic ring and the dome
+    const R = 22;
     for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * 2 * Math.PI;
-      const x = 19 * Math.cos(a), z = 19 * Math.sin(a);
-      cylinder(x, z, w(1.6, 0.8), w(1.8, 0.8), g, g + 22, mats.ochre, 8);
-      cols.push(new Vector3(x, g + 23.5, z));
+      const a = (i * Math.PI) / 4, ca = Math.cos(a), sa = Math.sin(a);
+      column(R * ca, R * sa, 5, 5, g, g + 22, mats.ochre, true).rotation.y = -a;
+      column((R + 3.2) * ca, (R + 3.2) * sa, 3.5, 7.5, g, g + 3, mats.ochre).rotation.y = -a;
+      for (const t of [-2.4, 2.4]) shaft((R + 3.2) * ca - t * sa, (R + 3.2) * sa + t * ca, g + 3, g + 20.5);
+      shaft((R - 3.5) * ca, (R - 3.5) * sa, g, g + 20.5);
+      const m = a + Math.PI / 8, apothem = R * Math.cos(Math.PI / 8);
+      add(new TorusGeometry(6.5, w(1.1, 0.5), 6, 12, Math.PI), mats.ochre, apothem * Math.cos(m), g + 14.5, apothem * Math.sin(m)).rotation.y = -m - Math.PI / 2;
+      column(apothem * Math.cos(m), apothem * Math.sin(m), 2 * R * Math.sin(Math.PI / 8), 2.5, g + 19.5, g + 22, mats.ochre).rotation.y = -m - Math.PI / 2;
     }
-    for (let i = 0; i < 8; i++) bar(cols[i], cols[(i + 1) % 8], w(4, 1), mats.ochre);
-    cylinder(0, 0, 20, 20, g + 25, g + 30, mats.ochre, 16, true);
-    add(new SphereGeometry(19, 24, 12, 0, 2 * Math.PI, 0, Math.PI / 2), mats.terracotta, 0, g + 30, 0, true);
-    // the colonnade, an arc through the rotunda concave to the lagoon, with an entablature along its top
-    const C = new Vector3(40, 0, 130), R = 136;
-    const a0 = Math.atan2(-C.z, -C.x);
-    const step = 6 / R;
-    let last: Vector3 | null = null;
-    for (let a = a0 - 0.55; a <= a0 + 0.55; a += step) {
-      const x = C.x + R * Math.cos(a), z = C.z + R * Math.sin(a);
-      if (Math.hypot(x, z) < 24) {
-        last = null;
-        continue;
+    const ring = (r: number, half: number, y0: number, y1: number) =>
+      sweep([[-half, y0], [-half, y1], [half, y1], [half, y0], [-half, y0]], new Vector3(0, 0, 0), r, 0, 2 * Math.PI, 8, g, mats.ochre, true);
+    ring(R + 1.5, w(1.7, 0.5), 22, 26);
+    ring(R - 1.5, w(1.3, 0.5), 26, 32.5);
+    add(new SphereGeometry(17, 24, 12, 0, 2 * Math.PI, 0, Math.PI / 2), mats.terracotta, 0, g + 32.5, 0, true);
+
+    // the colonnade, out to 150 m each side of the rotunda: two rows of columns 30 ft apart under a lintel, a planter
+    // box on four columns every 45 m with the maidens at its corners, and a pylon at each end
+    const ROW = 4.5, TOP = 13, LINTEL = 15.5;
+    const lintel: [number, number][] = [[-w(0.9, 0.4), TOP], [-w(0.9, 0.4), LINTEL], [w(0.9, 0.4), LINTEL], [w(0.9, 0.4), TOP], [-w(0.9, 0.4), TOP]];
+    for (const side of [-1, 1]) {
+      for (const r of [ARC_R - ROW, ARC_R + ROW]) {
+        sweep(lintel, ARC, r, onArc(26 * side, r).a, onArc(150 * side, r).a, 24, g, mats.ochre, true);
+        for (let s = 26; s <= 150; s += 4.6) {
+          const p = onArc(s * side, r);
+          shaft(p.x, p.z, g, g + TOP);
+        }
       }
-      const gc = ground(x, z, 0);
-      cylinder(x, z, w(1, 0.7), w(1.1, 0.7), gc, gc + 12, mats.ochre, 6);
-      const topPt = new Vector3(x, gc + 13.2, z);
-      if (last) bar(last, topPt, w(2.4, 0.8), mats.ochre);
-      last = topPt;
+      for (const sb of [45, 90, 135]) {
+        const p = onArc(sb * side, ARC_R);
+        column(p.x, p.z, 8, 2 * ROW + 3, g + LINTEL, g + LINTEL + 4.5, mats.ochre, true).rotation.y = -p.a - Math.PI / 2;
+        for (const ds of [-3, 3])
+          for (const dr of [-ROW - 1, ROW + 1]) {
+            const q = onArc(sb * side + ds, ARC_R + dr);
+            cylinder(q.x, q.z, w(0.5, 0.35), w(0.6, 0.35), g + LINTEL + 4.5, g + LINTEL + 7.5, mats.stone, 6);
+          }
+      }
+      const e = onArc(155 * side, ARC_R);
+      column(e.x, e.z, 7, 11, g, g + 19, mats.ochre, true).rotation.y = -e.a - Math.PI / 2;
     }
-    // the exhibition hall, a long curved shed on the outer arc
-    const R2 = R + 75, seg = 0.06;
-    for (let a = a0 - 0.42; a < a0 + 0.42; a += seg) {
-      const am = a + seg / 2;
-      const x = C.x + R2 * Math.cos(am), z = C.z + R2 * Math.sin(am);
-      const gh = ground(x, z, 15);
-      const m = add(new BoxGeometry(R2 * seg + 0.5, 18, 40), mats.ochre, x, gh + 9, z, true);
-      m.rotation.y = -am - Math.PI / 2;
+
+    // the exhibition hall behind the colonnade: 135 ft wide, 45 ft to the crown of its arched roof
+    const HALL = ARC_R + 30, half = 145 / HALL;
+    const ha0 = -Math.PI / 2 - half, ha1 = -Math.PI / 2 + half;
+    sweep([[0, 0], [0, 9], [41, 9], [41, 0], [0, 0]], ARC, HALL, ha0, ha1, 24, g, mats.stone, true);
+    sweep([[0, 9], [3, 11.2], [9, 12.8], [20.5, 13.7], [32, 12.8], [38, 11.2], [41, 9]], ARC, HALL, ha0, ha1, 24, g, mats.roof, true);
+    for (const a of [ha0, ha1]) column(ARC.x + (HALL + 20.5) * Math.cos(a), ARC.z + (HALL + 20.5) * Math.sin(a), 41, 1.2, g, g + 13.2, mats.stone).rotation.y = -a;
+
+    // the lagoon, sketched: it fills the curve of the colonnade, wider in the middle, with an irregular far shore
+    const shore: [number, number][] = [];
+    for (let s = -128; s <= 128; s += 16) {
+      const p = onArc(s, ARC_R - 14 - 0.15 * Math.abs(s));
+      shore.push([p.x, p.z]);
     }
+    for (const xz of [[128, 78], [110, 98], [85, 114], [55, 126], [20, 130], [-15, 124], [-45, 120], [-75, 112], [-100, 100], [-120, 82]] as [number, number][]) shore.push(xz);
+    sheet(shore, g + 1, mats.water, mats.shore);
   },
 };
 
