@@ -771,6 +771,9 @@ const salesforceTower: Landmark = {
 
 const LANDMARKS: Landmark[] = [goldenGate, sutroTower, alcatraz, palaceOfFineArts, transamerica, salesforceTower];
 
+/** the postcard view of a landmark by its name, for the drawing that stands in for it at the home view */
+export const postcardOf = (name: string) => LANDMARKS.find(l => l.name === name)?.postcard;
+
 // ---- the layer
 
 interface Built {

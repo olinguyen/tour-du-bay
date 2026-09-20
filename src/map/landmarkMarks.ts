@@ -2,10 +2,13 @@
 // models to read (and for 2D, which has no models at all). Inline SVG in HTML markers, like the start dots: no image
 // file, nothing new for the CSP.
 import maplibregl, { type Map as MlMap, type Marker } from 'maplibre-gl';
-import { reducedMotion } from '../lib/html';
+import { esc, reducedMotion } from '../lib/html';
+import { LYR } from './style';
 
 interface Mark {
   name: string;
+  /** the small line under the name in the tooltip */
+  note: string;
   at: [number, number];
   /** drawn size in px; the foot of the drawing stands on the place */
   w: number;
@@ -27,6 +30,7 @@ const RED = 'fill="none" stroke="#c4432b" stroke-linecap="round" stroke-linejoin
 const MARKS: Mark[] = [
   {
     name: 'Golden Gate Bridge',
+    note: 'opened 1937',
     at: [-122.4786, 37.81968],
     w: 44,
     h: 20,
@@ -35,6 +39,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Transamerica Pyramid',
+    note: '1972',
     at: [-122.402785, 37.795167],
     w: 12,
     h: 28,
@@ -43,6 +48,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Salesforce Tower',
+    note: '2018',
     at: [-122.396935, 37.789776],
     w: 9,
     h: 32,
@@ -51,6 +57,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Sutro Tower',
+    note: "the city's television mast, 1973",
     at: [-122.45286, 37.75524],
     w: 16,
     h: 30,
@@ -59,6 +66,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Alcatraz',
+    note: 'the prison island, 1934 to 1963',
     at: [-122.4228, 37.82685],
     w: 30,
     h: 15,
@@ -67,6 +75,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Palace of Fine Arts',
+    note: '1915 exposition',
     at: [-122.44843, 37.80292],
     w: 30,
     h: 18,
@@ -77,6 +86,7 @@ const MARKS: Mark[] = [
   // ---- 2D only: places with no model
   {
     name: 'Sutro Baths and the Cliff House',
+    note: 'the baths opened in 1896; ruins since 1966',
     at: [-122.51385, 37.7794],
     w: 30,
     h: 18,
@@ -86,6 +96,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Coit Tower',
+    note: 'Telegraph Hill, 1933',
     at: [-122.405834, 37.802379],
     w: 8,
     h: 26,
@@ -95,6 +106,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Ferry Building',
+    note: '1898',
     at: [-122.393474, 37.795548],
     w: 34,
     h: 22,
@@ -104,6 +116,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Bay Bridge',
+    note: 'opened 1936',
     at: [-122.3778, 37.7972],
     w: 44,
     h: 18,
@@ -113,6 +126,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'The Campanile',
+    note: 'Sather Tower, 1914',
     at: [-122.257831, 37.87206],
     w: 8,
     h: 30,
@@ -122,6 +136,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Mt Diablo summit',
+    note: 'the summit building and its beacon',
     at: [-121.914267, 37.88183],
     w: 22,
     h: 16,
@@ -132,6 +147,7 @@ const MARKS: Mark[] = [
   },
   {
     name: 'The Stanford Dish',
+    note: 'a radio telescope in the foothills',
     at: [-122.1794, 37.4083],
     w: 24,
     h: 22,
@@ -141,15 +157,19 @@ const MARKS: Mark[] = [
   },
   {
     name: 'Alpine Dam',
+    note: 'the ride crosses it',
     at: [-122.638701, 37.940135],
     w: 28,
     h: 14,
     from: 10.6,
+    // the ride crosses the dam, and a ride's line always wins the pointer: lifted, the drawing can still be named
+    lift: true,
     only2d: true,
     svg: `<path ${INK} d="M2 3.5 H26 L22 14 H6 Z"/><path fill="none" stroke="#7fa0a3" stroke-width="1.4" stroke-linecap="round" d="M0 2 H28"/><path fill="var(--page)" d="M12.5 3.5 H15.5 V7 H12.5 Z"/>`,
   },
   {
     name: 'Point Bonita Lighthouse',
+    note: 'at the mouth of the Golden Gate',
     at: [-122.529548, 37.81559],
     w: 22,
     h: 20,
@@ -162,21 +182,81 @@ const MARKS: Mark[] = [
 /** in 3D the grown models already read at zoom 10.5, so the drawings are for the home view only; 2D has no models, so there they stay */
 const MODELS_FROM = 9.9;
 
+const LIFT = 26;
+
+/**
+ * The drawings are decoration and the rides are what the map is for, so a drawing never takes a hover or a click from
+ * a ride: over a ride's line it stays silent and the click goes to the ride. Hovering one names it, in the rides' own
+ * tooltip. A click moves nothing in 2D (it shows the same tooltip, which is what a tap gets); in 3D, where a drawing
+ * stands in for a model at the home view, it flies to the model's postcard.
+ */
 export function addLandmarkMarks(map: MlMap): Marker[] {
+  const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', anchor: 'bottom', maxWidth: 'none' });
+  let pinned = false;
+  let justPinned = false;
+  let shown: Mark | null = null;
+  const overRide = (e: MouseEvent) => {
+    if (!map.getLayer(LYR.routeHit)) return false;
+    const box = map.getContainer().getBoundingClientRect();
+    return map.queryRenderedFeatures([e.clientX - box.left, e.clientY - box.top], { layers: [LYR.routeHit] }).length > 0;
+  };
+  const show = (m: Mark) => {
+    shown = m;
+    tip
+      .setLngLat(m.at)
+      .setOffset([0, -(m.h + (m.lift ? LIFT : 0) + 6)])
+      .setHTML(`<span>${esc(m.name)}</span><small>${esc(m.note)}</small>`)
+      .addTo(map);
+  };
+  const hide = () => {
+    pinned = false;
+    shown = null;
+    tip.remove();
+  };
   const made = MARKS.map((m) => {
     const el = document.createElement('div');
     el.className = 'mk lm';
-    el.title = m.name;
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', m.name);
     el.innerHTML = `<svg class="${m.lift ? 'lifted' : ''}" width="${m.w}" height="${m.h}" viewBox="0 0 ${m.w} ${m.h}" aria-hidden="true">${m.svg}</svg>`;
+    el.addEventListener('mousemove', (e) => {
+      if (overRide(e)) {
+        if (!pinned) hide();
+      } else if (shown !== m) {
+        pinned = false;
+        show(m);
+      }
+    });
+    el.addEventListener('mouseleave', () => {
+      if (!pinned) hide();
+    });
     el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      map.flyTo({ center: m.at, zoom: 14.5, duration: reducedMotion() ? 0 : 2200 });
+      if (overRide(e)) return;
+      if (map.getTerrain() != null && !m.only2d) {
+        hide();
+        import('./landmarks3d').then(({ postcardOf }) => {
+          const view = postcardOf(m.name);
+          if (view) map.flyTo({ ...view, duration: reducedMotion() ? 0 : 2200 });
+        });
+        return;
+      }
+      show(m);
+      pinned = justPinned = true;
     });
     return { m, el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(m.at).addTo(map) };
   });
+  // a click on a drawing reaches the map as well: that one keeps the tooltip it has just pinned, any other lets it go
+  map.on('click', () => {
+    if (!justPinned) hide();
+    justPinned = false;
+  });
+  map.on('movestart', hide);
   const paint = () => {
     const z = map.getZoom(), models = map.getTerrain() != null;
-    for (const { m, el } of made) el.classList.toggle('off', z < m.from || (models && (m.only2d === true || z >= MODELS_FROM)));
+    for (const { m, el } of made) {
+      el.classList.toggle('off', z < m.from || (models && (m.only2d === true || z >= MODELS_FROM)));
+      el.classList.toggle('go', models && !m.only2d);
+    }
   };
   map.on('zoom', paint);
   map.on('terrain', paint);
