@@ -73,8 +73,8 @@ const MARKS: Mark[] = [
   },
 ];
 
-/** in 3D the grown models read from here in, and take over; 2D has none, so there the drawings stay */
-const MODELS_FROM = 10.8;
+/** in 3D the grown models already read at zoom 10.5, so the drawings are for the home view only; 2D has no models, so there they stay */
+const MODELS_FROM = 9.9;
 
 export function addLandmarkMarks(map: MlMap): Marker[] {
   const made = MARKS.map((m) => {
