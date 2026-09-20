@@ -13,6 +13,10 @@ import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
+import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
+
+/** PROTOTYPE: which landmark rendering to show — ?landmark=extrude (default) | three | none */
+const LANDMARK = new URLSearchParams(location.search).get('landmark') ?? 'extrude';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 /** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
@@ -143,6 +147,8 @@ export class GuideMap {
       touchPitch: true,
     }));
     this.allowTurning(this.perspective === '3d');
+    // PROTOTYPE: a handle for the screenshot script
+    if (LANDMARK !== 'none') (window as unknown as { tdbMap?: MlMap }).tdbMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     const scale = new maplibregl.ScaleControl({ maxWidth: 80, unit: units.get() });
     map.addControl(scale, 'bottom-left');
@@ -168,6 +174,7 @@ export class GuideMap {
       this.addStarts();
       this.addLabels();
       this.loadWater();
+      this.addLandmarks();
       this.paint();
       this.flushView();
     });
@@ -315,6 +322,25 @@ export class GuideMap {
     this.paintNames();
   }
 
+  /** PROTOTYPE: the Golden Gate, shown in 3D only (from above an extrusion is just its footprint) */
+  private landmarkIds: string[] = [];
+  private addLandmarks() {
+    if (LANDMARK === 'extrude') {
+      addExtrudedLandmarks(this.map);
+      this.landmarkIds = [LANDMARK_LYR];
+      this.showLandmarks(this.perspective);
+    } else if (LANDMARK === 'three') {
+      import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
+        this.map.addLayer(threeLandmarks(this.map));
+        this.landmarkIds = [LANDMARK_3D];
+        this.showLandmarks(this.perspective);
+      });
+    }
+  }
+  private showLandmarks(mode: Perspective) {
+    for (const id of this.landmarkIds) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', mode === '3d' ? 'visible' : 'none');
+  }
+
   /** the polygons are ~400 KB; loading them as their own chunk keeps them off the app's critical path */
   private loadWater() {
     import('../data/bay-water.json')
@@ -412,6 +438,7 @@ export class GuideMap {
     this.allowTurning(mode === '3d');
     if (changed) this.events.onPerspective?.(mode);
     if (this.loaded) this.map.setTerrain(mode === '3d' ? { source: SRC.terrain, exaggeration: 1 } : null);
+    if (this.loaded) this.showLandmarks(mode);
   }
 
   /** 2D stays north-up and flat, so every way of turning or tilting the map (mouse, touch, keyboard) is 3D-only */
