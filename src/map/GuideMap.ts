@@ -15,8 +15,9 @@ import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
-/** PROTOTYPE: which landmark rendering to show — ?landmark=three (default) | extrude | none */
-const LANDMARK = new URLSearchParams(location.search).get('landmark') ?? 'three';
+/** which landmark layer draws: ?landmark=three (the default), extrude, or none */
+const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
+const LANDMARK = LANDMARK_PARAM ?? 'three';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 /** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
@@ -153,7 +154,8 @@ export class GuideMap {
     }));
     this.allowTurning(this.perspective === '3d');
     // PROTOTYPE: a handle for the screenshot script
-    if (LANDMARK !== 'none') (window as unknown as { tdbMap?: MlMap }).tdbMap = map;
+    // a handle for the headless screenshot script, only on a page that spells the landmark flag out
+    if (LANDMARK_PARAM) (window as unknown as { tdbMap?: MlMap }).tdbMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     const scale = new maplibregl.ScaleControl({ maxWidth: 80, unit: units.get() });
     map.addControl(scale, 'bottom-left');
