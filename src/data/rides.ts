@@ -182,7 +182,7 @@ export const RIDE_INPUTS: RideInput[] = [
     photos: [
       { f: 0.11, cap: "Stone bridge, bottom of OLH" },
       { f: 0.24, cap: "Redwoods, upper OLH" },
-      { f: 0.56, cap: "Page Mill, Monte Bello" },
+      { f: 0.57, cap: "Page Mill, Monte Bello" },
     ],
   },
 ];
