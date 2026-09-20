@@ -62,8 +62,10 @@ const tripFor = (r: Ride) => (ridingIn.get() && rideIn(r)) || r;
 const tipHtml = (r: Ride) => {
   const u = units.get();
   const t = tripFor(r);
-  // the station's name already says BART or Caltrain, so the trip in names its start in place of the tag
-  const start = t.approach ? ` · from ${t.transit ? '' : 'the '}${place(t.start)}` : t.transit ? ' · ' + t.transit : '';
+  // riding in, every ride that can be reached names where from, the ones that begin at a station included; the
+  // station's name already says BART or Caltrain, so it stands in place of the tag
+  const named = ridingIn.get() && (t.approach || t.transit);
+  const start = named ? ` · from ${t.transit ? '' : 'the '}${place(t.start)}` : t.transit ? ' · ' + t.transit : '';
   const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${start}`;
   return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
 };
@@ -323,8 +325,11 @@ export class GuideMap {
     this.hintDot = null;
     const r = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
     const t = r && tripFor(r);
-    if (!t?.approach) return;
-    const html = `<div class="from-dot hint${t.transit ? ' transit' : ''}" data-area="${esc(areaSlug(t.area))}"><em>${esc(place(t.start))}</em></div>`;
+    if (!t || !ridingIn.get() || !(t.approach || t.transit)) return;
+    // a ride that begins at its station has the dot already, ringed: only the name is added, across from the ride's
+    const at = t.approach ? `${t.transit ? ' transit' : ''}"` : ` bare"`;
+    const side = t.approach || t.labelSide === 'l' ? '' : ' class="l"';
+    const html = `<div class="from-dot hint${at} data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(place(t.start))}</em></div>`;
     this.hintDot = marker(this.map, t.route[0], html);
   }
 
