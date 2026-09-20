@@ -26,6 +26,8 @@ export const SRC = {
   water: 'water',
   coast: 'coast',
   routes: 'routes',
+  /** the way in from a ride's alternative start, drawn apart from the ride itself */
+  approach: 'approach',
   climbs: 'climbs',
   progress: 'progress',
   leg: 'leg',
@@ -41,6 +43,8 @@ export const LYR = {
   route: 'route-line',
   routeHit: 'route-hit',
   climb: 'route-climb',
+  approachHalo: 'route-approach-halo',
+  approach: 'route-approach',
   progress: 'route-progress',
   leg: 'route-leg',
 } as const;
@@ -70,6 +74,7 @@ export function mapStyle(): StyleSpecification {
       [SRC.water]: { type: 'geojson', data: empty() },
       [SRC.coast]: { type: 'geojson', data: empty() },
       [SRC.routes]: { type: 'geojson', data: empty(), promoteId: 'slug' },
+      [SRC.approach]: { type: 'geojson', data: empty() },
       [SRC.climbs]: { type: 'geojson', data: empty() },
       [SRC.progress]: { type: 'geojson', data: empty() },
       [SRC.leg]: { type: 'geojson', data: empty() },

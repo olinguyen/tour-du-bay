@@ -3,13 +3,14 @@
 // (start dots, photo pins, the rider, place labels) stays an HTML marker, so the stylesheet still draws them.
 import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson';
 import maplibregl, { type LngLatBoundsLike, type Map as MlMap, type MapGeoJSONFeature, type Marker } from 'maplibre-gl';
-import { LABELS, RIDES, ridesIn } from '../data/guide';
+import { LABELS, RIDES, ridesIn, tripFor } from '../data/guide';
 import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, MapLabel, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion, storage } from '../lib/html';
-import { areaSlug, climbs, pad2 } from '../lib/route';
+import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
+import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 
@@ -22,6 +23,8 @@ const FOLLOW_MS = 50;
 const PANEL_GAP_PX = 24;
 /** map px the floating toggle button covers along the bottom edge on a phone */
 const TOGGLE_PX = 80;
+/** map px a ride's name needs when it is lettered to the left of its start dot */
+const LEFT_LABEL_PX = 110;
 /** the pitch 3D tilts to, and how long the tilt takes */
 const PITCH = 42, TILT_MS = 900;
 /** how long the compass takes to swing back north, and a zoom button's step */
@@ -54,10 +57,12 @@ const line = (route: LatLng[]): Feature<LineString> => ({
 const collection = (features: Feature[]): FeatureCollection => ({ type: 'FeatureCollection', features });
 const box = ([[s, w], [n, e]]: [LatLng, LatLng]): LngLatBoundsLike => [[w, s], [e, n]];
 
-/** read at hover time, so a tooltip opened after the units changed shows the units now in force */
+/** read at hover time, so a tooltip opened after the units or the start changed shows the choice now in force */
 const tipHtml = (r: Ride) => {
   const u = units.get();
-  const figures = `${r.area} · ${dist(r.lengthMi, u)} ${distUnit(u)} · ${elev(r.feet, u)} ${elevUnit(u)}${r.transit ? ' · ' + r.transit : ''}`;
+  const t = tripFor(r, rideIn.get());
+  // figures only: the map names the station itself while the ride is hot, so the tooltip does not say it again
+  const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${t.transit ? ' · ' + t.transit : ''}`;
   return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
 };
 
@@ -82,7 +87,10 @@ export class GuideMap {
   private readonly flyTimers = new Set<number>();
   private readonly tip: maplibregl.Popup;
   private readonly unwatchUnits: () => void;
+  private readonly unwatchRideIn: () => void;
   private pins: Marker[] = [];
+  /** the station (or the Panhandle) a ride is ridden in from: the open ride's, or on the overview the hovered ride's as a hint */
+  private fromDot: Marker | null = null;
   private ride: Ride | null = null;
   private area: Area | null = null;
   private hot: string | null = null;
@@ -131,8 +139,15 @@ export class GuideMap {
     map.addControl(scale, 'bottom-left');
     // the scale bar is the map's own readout of the reader's choice, so it follows the store rather than a prop
     this.unwatchUnits = units.subscribe(() => scale.setUnit(units.get()));
+    // the start switch sits on the overview too: a ride held hot by the list or the keyboard follows it at once
+    this.unwatchRideIn = rideIn.subscribe(() => this.station());
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
+    // the tooltip carries the hot ride's name, so the stylesheet drops the copy beside its start dot while it is open;
+    // a ride made hot from the list or the keyboard has no tooltip, and keeps its label. That holds zoomed in too,
+    // where every ride's name shows (paintNames): the others' go as they dim, and the hot one's goes with them
+    this.tip.on('open', () => document.body.classList.add('tipped'));
+    this.tip.on('close', () => document.body.classList.remove('tipped'));
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
     this.rider.getElement().style.opacity = '0';
 
@@ -163,11 +178,12 @@ export class GuideMap {
 
   destroy() {
     this.unwatchUnits();
+    this.unwatchRideIn();
     this.clearTimers(this.timers);
     this.clearTimers(this.flyTimers);
     this.observer.disconnect();
     this.map.remove();
-    document.body.classList.remove('names');
+    document.body.classList.remove('names', 'tipped');
   }
 
   // ---- layers
@@ -183,6 +199,17 @@ export class GuideMap {
 
     const state = (key: string) => ['boolean', ['feature-state', key], false] as unknown as maplibregl.ExpressionSpecification;
     const hot = state('hot'), faint = state('faint'), dim = state('dim');
+    // the way in from the station: the ride's own colour, thinner and lighter, under the ride itself. Not dashed:
+    // the way there and the way back run the same road for most of their length, and two dashed lines in opposite
+    // directions read as one solid one where their dashes interleave.
+    map.addLayer({ id: LYR.approachHalo, type: 'line', source: SRC.approach, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': pal.halo, 'line-width': 5, 'line-opacity': 0.7 } });
+    map.addLayer({
+      id: LYR.approach,
+      type: 'line',
+      source: SRC.approach,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': 0.6 },
+    });
     map.addLayer({
       id: LYR.routeHalo,
       type: 'line',
@@ -232,7 +259,7 @@ export class GuideMap {
     const r = RIDES.find(x => x.slug === slug);
     if (!r) return;
     this.map.getCanvas().style.cursor = 'pointer';
-    this.tip.setLngLat(at).setHTML(tipHtml(r)).addTo(this.map);
+    this.showTip(at, r);
     this.events.onHover(slug);
   }
 
@@ -244,7 +271,7 @@ export class GuideMap {
       el.addEventListener('mouseenter', () => {
         if (this.ride) return;
         this.events.onHover(r.slug);
-        this.tip.setLngLat(ll(r.route[0])).setHTML(tipHtml(r)).addTo(this.map);
+        this.showTip(ll(r.route[0]), r);
       });
       el.addEventListener('mouseleave', () => {
         if (this.ride) return;
@@ -288,6 +315,29 @@ export class GuideMap {
   setHot(slug: string | null) {
     this.hot = slug;
     if (!this.ride) this.paint();
+    this.station();
+  }
+
+  /**
+   * Where the reader rides in from, for the open ride or else the hovered one: the station's dot and name for a trip
+   * in, the name alone for a ride that begins at its station (its numbered dot is the station, already ringed). The
+   * way in itself is drawn only for an open ride.
+   */
+  private station() {
+    this.fromDot?.remove();
+    this.fromDot = null;
+    const hot = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
+    const t = this.ride ?? (hot && tripFor(hot, rideIn.get()));
+    if (!t || !(t.approach || (rideIn.get() && t.transit))) return;
+    const kind = `${this.ride ? '' : ' hint'}${t.approach ? (t.transit ? ' transit' : '') : ' bare'}`;
+    // a ride that begins at its station shows its own name beside the same dot: the station's goes across from it.
+    // A station ridden in from is an end of the trip, and the view is fitted to the trip: lettered outwards from
+    // its eastern edge, the name would run off the map or under the controls, so it is lettered inwards
+    const [[, w], [, e]] = bounds([t.route]);
+    const left = t.approach ? t.route[0][1] > (w + e) / 2 : t.labelSide !== 'l';
+    const side = left ? ' class="l"' : '';
+    const html = `<div class="from-dot${kind}" data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(t.startLabel ?? place(t.start))}</em></div>`;
+    this.fromDot = marker(this.map, t.route[0], html);
   }
 
   setArea(area: Area | null) {
@@ -390,14 +440,18 @@ export class GuideMap {
     return this.perspective === '3d' ? PITCH : 0;
   }
 
+  /** a ride as planned, or the same ride in from its alternative start: a different object, drawn afresh */
   openRide(ride: Ride) {
     if (ride === this.ride) return;
     this.resetRide();
     this.ride = ride;
     this.tip.remove();
+    this.station();
     this.paint();
 
     const colour = this.hotColour(ride);
+    if (ride.approach) this.setData(SRC.approach, ride.approach.lines.map(l => ({ ...line(l), properties: { color: this.colour(ride) } })));
+    document.body.classList.toggle('ridein', !!ride.approach);
     this.setData(SRC.climbs, climbs(ride).map(({ a, b }) => ({ ...line(sliceBetween(ride.route, ride.cum, a, b)), properties: { color: colour } })));
     this.pins = ride.photos.map((ph, i) => {
       const m = marker(this.map, pointAt(ride.route, ride.cum, ph.f), `<i>${i + 1}</i>`, 'photo-pin');
@@ -428,6 +482,7 @@ export class GuideMap {
     this.resetRide();
     this.ride = null;
     this.paint();
+    this.station();
     if (this.area) this.fly(bounds(ridesIn(this.area).map(r => r.route)), 1.1, 'area');
     else this.fly(HOME, 1.2, 'home');
   }
@@ -524,6 +579,10 @@ export class GuideMap {
     return (this.pal.area[areaSlug(r.area)] ?? { hot: this.pal.routeHot }).hot;
   }
 
+  private colour(r: Ride) {
+    return (this.pal.area[areaSlug(r.area)] ?? { base: this.pal.route }).base;
+  }
+
   private setData(id: string, features: Feature[]) {
     const src = this.map.getSource(id) as maplibregl.GeoJSONSource | undefined;
     src?.setData(collection(features));
@@ -535,6 +594,10 @@ export class GuideMap {
     this.flying = this.previewing = false;
     for (const m of this.pins) m.remove();
     this.pins = [];
+    this.fromDot?.remove();
+    this.fromDot = null;
+    this.setData(SRC.approach, []);
+    document.body.classList.remove('ridein');
     this.setData(SRC.climbs, []);
     this.setData(SRC.leg, []);
     this.setData(SRC.progress, []);
@@ -552,7 +615,9 @@ export class GuideMap {
       const dot = this.starts.get(r.slug)?.getElement().firstElementChild;
       let s: { hot: boolean; dim: boolean; faint: boolean };
       if (ride) {
-        s = { hot: r === ride, dim: r === ride && this.flying, faint: r !== ride };
+        // the open ride may be the trip in from the station, a different object for the same ride
+        const open = r.slug === ride.slug;
+        s = { hot: open, dim: open && this.flying, faint: !open };
         dot?.classList.remove('hot');
         dot?.classList.toggle('dim', !inArea);
       } else {
@@ -585,15 +650,30 @@ export class GuideMap {
       if (kind === 'ride') return { top: 90, left: 24, right: 24, bottom: TOGGLE_PX + 16 };
       return { top: 40, left: 24, right: 24, bottom: TOGGLE_PX };
     }
+    const f = this.panelPx();
+    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 20 };
+    if (kind === 'ride') return { top: 90, left: 70 + f, right: 70, bottom: 110 };
+    // a region shows its rides' names; one lettered to the left of its dot (labelSide 'l') needs the room to be read
+    // beside the panel rather than under it
+    const lettered = this.area && ridesIn(this.area).some(r => r.labelSide === 'l') ? LEFT_LABEL_PX : 0;
+    return { top: 70, left: 70 + f + lettered, right: 70, bottom: 70 };
+  }
+
+  /** map px the floating panel covers along the left edge, gap included; 0 when it is hidden or does not float */
+  private panelPx() {
+    if (this.mobile) return 0;
     // the floating panel's actual width (0 in a layout where it doesn't cover the map)
     const side = document.getElementById('side');
     const panel = document.documentElement.classList.contains('float') && side ? side.offsetWidth : 0;
     const px = panel ? panel + PANEL_GAP_PX : 0;
     // on a narrow window the panel covers most of the map; padding for it would leave no room to fit anything
-    const f = this.covered && !this.previewing && px < this.map.getContainer().clientWidth * 0.6 ? px : 0;
-    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 20 };
-    if (kind === 'ride') return { top: 90, left: 70 + f, right: 70, bottom: 110 };
-    return { top: 70, left: 70 + f, right: 70, bottom: 70 };
+    return this.covered && !this.previewing && px < this.map.getContainer().clientWidth * 0.6 ? px : 0;
+  }
+
+  /** the tooltip keeps inside the map by itself, but the panel floats over the map's left edge: keep clear of that too */
+  private showTip(at: maplibregl.LngLatLike, r: Ride) {
+    this.tip.setPadding({ left: this.panelPx() });
+    this.tip.setLngLat(at).setHTML(tipHtml(r)).addTo(this.map);
   }
 
   private refit(duration: number) {

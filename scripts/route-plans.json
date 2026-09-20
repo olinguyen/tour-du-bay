@@ -8,7 +8,11 @@
     "danville-railroad": { "name": "Danville · Railroad Ave at Prospect", "coordinate": [-122.0003, 37.8209] },
     "berkeley-bart": { "name": "Downtown Berkeley BART", "coordinate": [-122.2676235, 37.8710537] },
     "woodside-roberts": { "name": "Woodside · Roberts Market", "coordinate": [-122.254385, 37.429608] },
-    "portola-valley-town-center": { "name": "Portola Valley Town Center", "coordinate": [-122.2122, 37.3766] }
+    "portola-valley-town-center": { "name": "Portola Valley Town Center", "coordinate": [-122.2122, 37.3766] },
+    "panhandle": { "name": "Panhandle · Stanyan entrance", "coordinate": [-122.453697, 37.772978] },
+    "walnut-creek-bart": { "name": "Walnut Creek BART", "coordinate": [-122.067344, 37.905796] },
+    "menlo-park-caltrain": { "name": "Menlo Park Caltrain", "coordinate": [-122.182236, 37.454357] },
+    "palo-alto-caltrain": { "name": "Palo Alto Caltrain", "coordinate": [-122.164925, 37.443482] }
   },
   "segments": {
     "mill-valley-camino-alto": {
@@ -98,18 +102,44 @@
     },
     "skylonda-coast-tunitas-kings": {
       "role": "core",
-      "via": [[-122.2643, 37.386368], [-122.2739, 37.32], [-122.386506, 37.326858], [-122.3994809, 37.3588506], [-122.313825, 37.424973], [-122.2948565, 37.4322165], [-122.266211, 37.426045]]
+      "via": [[-122.2643, 37.386368], [-122.2739, 37.32], [-122.386506, 37.326858], [-122.39751, 37.35883], [-122.313825, 37.424973], [-122.2948565, 37.4322165], [-122.266211, 37.426045]]
     },
 
     "old-la-honda-page-mill-loop": {
       "role": "core",
-      "via": [[-122.2122, 37.3766], [-122.246467, 37.395933], [-122.248924, 37.39002], [-122.251109, 37.381618], [-122.252552, 37.371884], [-122.232046, 37.348723], [-122.177651, 37.336507], [-122.163728, 37.388157], [-122.1936, 37.383], [-122.2015, 37.3761], [-122.2076, 37.3722], [-122.2122, 37.3766]]
-    }
+      "via": [[-122.2122, 37.3766], [-122.246467, 37.395933], [-122.248924, 37.39002], [-122.251109, 37.381618], [-122.252552, 37.371884], [-122.232046, 37.348723], [-122.177651, 37.336507], [-122.16571, 37.38482], [-122.1936, 37.383], [-122.2015, 37.3761], [-122.2076, 37.3722], [-122.2122, 37.3766]]
+    },
+    "panhandle-mill-valley": {
+      "role": "connector",
+      "via": [[-122.453697, 37.772978], [-122.45698, 37.77739], [-122.4593, 37.7904], [-122.4752, 37.8077], [-122.483423, 37.856745], [-122.5146, 37.8805], [-122.5477, 37.9065]]
+    },
+    "mill-valley-panhandle": { "role": "connector", "reverseVia": "panhandle-mill-valley" },
+    "panhandle-crissy": {
+      "role": "connector",
+      "via": [[-122.453697, 37.772978], [-122.45698, 37.77739], [-122.4593, 37.7904], [-122.452, 37.8057]]
+    },
+    "crissy-panhandle": { "role": "connector", "reverseVia": "panhandle-crissy" },
+    "walnut-creek-danville": {
+      "role": "connector",
+      "via": [[-122.067344, 37.905796], [-122.0552, 37.88491], [-122.03845, 37.85943], [-122.02751, 37.84385], [-122.0003, 37.8209]]
+    },
+    "danville-walnut-creek": { "role": "connector", "reverseVia": "walnut-creek-danville" },
+    "menlo-park-woodside": {
+      "role": "connector",
+      "via": [[-122.182236, 37.454357], [-122.23264, 37.41816], [-122.254385, 37.429608]]
+    },
+    "woodside-menlo-park": { "role": "connector", "reverseVia": "menlo-park-woodside" },
+    "palo-alto-portola-valley": {
+      "role": "connector",
+      "via": [[-122.164925, 37.443482], [-122.17343, 37.43232], [-122.19102, 37.41994], [-122.2122, 37.3766]]
+    },
+    "portola-valley-palo-alto": { "role": "connector", "reverseVia": "palo-alto-portola-valley" }
   },
   "itineraries": {
     "paradise-loop": {
       "startId": "mill-valley-depot",
       "parts": ["mill-valley-camino-alto", "paradise-loop-clockwise", "camino-alto-mill-valley"],
+      "transit": { "startId": "panhandle", "parts": ["panhandle-mill-valley", "mill-valley-camino-alto", "paradise-loop-clockwise", "camino-alto-mill-valley", "mill-valley-panhandle"] },
       "references": [
         "https://marinbike.org/ride-marin/paradise-loop/",
         "https://www.townoftiburon.org/"
@@ -118,6 +148,7 @@
     "tam-alpine-dam": {
       "startId": "fairfax-parkade",
       "parts": ["fairfax-alpine-dam", "alpine-dam-rock-spring", "rock-spring-east-peak", "east-peak-rock-spring", "rock-spring-pantoll-mill-valley", "mill-valley-fairfax"],
+      "transit": { "startId": "panhandle", "parts": ["panhandle-mill-valley", "mill-valley-fairfax", "fairfax-alpine-dam", "alpine-dam-rock-spring", "rock-spring-east-peak", "east-peak-rock-spring", "rock-spring-pantoll-mill-valley", "mill-valley-panhandle"] },
       "references": [
         "https://www.teamalameda.org/Resources/Documents/RouteSheets/pdfs/Medium/Local/4_56_Alpine%20Dam%20Loop.pdf",
         "https://pjammcycling.com/climb/350.Mt.%20Tam%20via%20Alpine%20Dam",
@@ -128,6 +159,7 @@
     "hawk-hill": {
       "startId": "crissy-field-east-beach",
       "parts": ["crissy-bridge-conzelman", "hawk-hill-climb", "hawk-hill-rodeo-beach", "rodeo-beach-bunker-conzelman", "conzelman-bridge-crissy"],
+      "transit": { "startId": "panhandle", "parts": ["panhandle-crissy", "crissy-bridge-conzelman", "hawk-hill-climb", "hawk-hill-rodeo-beach", "rodeo-beach-bunker-conzelman", "conzelman-bridge-crissy", "crissy-panhandle"] },
       "references": [
         "https://www.nps.gov/goga/planyourvisit/marin-headlands-scenic-vistas.htm",
         "https://www.nps.gov/places/000/hawk-hill-overlook.htm/",
@@ -146,6 +178,7 @@
     "diablo-south-gate": {
       "startId": "danville-railroad",
       "parts": ["danville-south-gate", "diablo-summit", "diablo-descent", "south-gate-danville"],
+      "transit": { "startId": "walnut-creek-bart", "parts": ["walnut-creek-danville", "danville-south-gate", "diablo-summit", "diablo-descent", "south-gate-danville", "danville-walnut-creek"] },
       "references": [
         "https://www.parks.ca.gov/?page_id=517",
         "https://www.mdia.org/visitor-information"
@@ -162,6 +195,7 @@
     "tunitas-creek": {
       "startId": "woodside-roberts",
       "parts": ["woodside-kings-mountain", "kings-mountain-skylonda", "skylonda-coast-tunitas-kings", "kings-mountain-woodside"],
+      "transit": { "startId": "menlo-park-caltrain", "parts": ["menlo-park-woodside", "woodside-kings-mountain", "kings-mountain-skylonda", "skylonda-coast-tunitas-kings", "kings-mountain-woodside", "woodside-menlo-park"] },
       "references": [
         "https://www.pjammcycling.com/climb/49.Tunitas-Creek-Rd",
         "https://www.smcgov.org/publicworks/road-closures-and-conditions"
@@ -170,6 +204,7 @@
     "old-la-honda": {
       "startId": "portola-valley-town-center",
       "parts": ["old-la-honda-page-mill-loop"],
+      "transit": { "startId": "palo-alto-caltrain", "parts": ["palo-alto-portola-valley", "old-la-honda-page-mill-loop", "portola-valley-palo-alto"] },
       "references": [
         "https://www.pjammcycling.com/climb/44.Old-La-Honda-Rd",
         "https://www.openspace.org/preserves/monte-bello",

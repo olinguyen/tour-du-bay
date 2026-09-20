@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KM_PER_MI } from '../lib/units.mjs';
-import { decodeRoute, encodeRoute, type PreparedRoute } from './routeCodec';
+import { composeRoute, decodeRoute, encodeRoute, type DecodedRoute, type PreparedRoute } from './routeCodec';
 
 const prepared: PreparedRoute = {
   span: 1.609344,
@@ -59,5 +59,47 @@ describe('decodeRoute', () => {
     expect(() => decodeRoute({ ...e, coords: e.coords.slice(0, 5) })).toThrow(/malformed/);
     expect(() => decodeRoute({ ...e, cum: e.cum.slice(1) })).toThrow(/malformed/);
     expect(() => decodeRoute({ ...e, ele: [1] })).toThrow(/malformed/);
+  });
+});
+
+describe('composeRoute', () => {
+  /** a straight part heading north from `lat`, 1 km long in two vertices, three profile samples at 100, 150, 200 ft */
+  const part = (lat: number, lng = -122.4, h = [100, 150, 200]): DecodedRoute => ({
+    route: [[lat, lng], [lat + 0.005, lng], [lat + 0.009, lng]],
+    cum: [0, 0.556, 1.0],
+    profile: [[0, h[0]], [0.5 / KM_PER_MI, h[1]], [1 / KM_PER_MI, h[2]]],
+  });
+
+  it('carries distances on from part to part and records where each part begins', () => {
+    const t = composeRoute([part(37.8), part(37.809, -122.4, [200, 210, 220])]);
+    expect(t.route).toHaveLength(5);
+    expect(t.cum).toEqual([0, 0.556, 1, 1.556, 2]);
+    expect(t.profile.map(p => p[1])).toEqual([100, 150, 200, 210, 220]);
+    expect(t.profile[4][0]).toBeCloseTo(2 / KM_PER_MI, 12);
+    expect(t.at).toEqual([0, 1 / KM_PER_MI, 2 / KM_PER_MI]);
+  });
+
+  it('keeps one vertex and one sample where two parts meet, whether on the same spot or a few metres apart', () => {
+    const t = composeRoute([part(37.8), part(37.809)]);
+    expect(t.route[2]).toEqual([37.809, -122.4]);
+    expect(t.route[3]).toEqual([37.814, -122.4]);
+    expect(t.profile).toHaveLength(5);
+    // a 22 m gap in the plan is not road: the trip is exactly as long as its parts
+    const g = composeRoute([part(37.8), part(37.8092)]);
+    expect(g.route).toHaveLength(5);
+    expect(g.cum).toEqual(t.cum);
+    expect(g.at).toEqual(t.at);
+  });
+
+  it('gives a trip that returns to its start one height there, without touching the parts', () => {
+    const north = part(37.8), back: DecodedRoute = { ...part(37.809, -122.4, [200, 150, 90]), route: [[37.809, -122.4], [37.804, -122.4], [37.8, -122.4]] };
+    const t = composeRoute([north, back]);
+    expect(t.profile[t.profile.length - 1][1]).toBe(100);
+    expect(back.profile[2][1]).toBe(90);
+    expect(composeRoute([north]).profile[2][1]).toBe(200);
+  });
+
+  it('refuses an empty trip', () => {
+    expect(() => composeRoute([])).toThrow(/at least one part/);
   });
 });

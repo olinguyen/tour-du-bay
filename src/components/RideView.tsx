@@ -1,16 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
-import { RIDES, ridesIn } from '../data/guide';
+import { RIDES, ridesIn, tripIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
 import { areaSlug, hm, legs, pad2, place, roman } from '../lib/route';
 import { dist, distUnit, distWord, elev, elevCoarse, elevUnit, elevWord, useUnits } from '../lib/measure';
+import { setRideIn } from '../lib/ridein';
 import { useStore, type Scrub, type Store } from '../lib/store';
 import { ProfileChart, scrubParts } from './ProfileChart';
 
 const CARD_KEY = 'bab-card';
 
 interface Props {
+  /** what is shown: the ride as planned, or the same ride in from its other start */
   ride: Ride;
+  /** the ride as planned, whichever trip is shown: its place in the guide, and where its two starts are */
+  base: Ride;
   /** the rides prev/next step through */
   seq: Ride[];
   scrub: Store<Scrub>;
@@ -24,19 +28,21 @@ interface Props {
   onLeg(leg: Leg | null): void;
 }
 
-export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, onOpen, onToggleFly, onPhotoHover, onLeg }: Props) {
+export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onBack, onOpen, onToggleFly, onPhotoHover, onLeg }: Props) {
   const u = useUnits();
   const card = useMemo(() => legs(r), [r]);
   const [cardOpen, setCardOpen] = useState(() => storage.get(CARD_KEY) === '1');
 
-  const si = seq.indexOf(r);
+  const si = seq.indexOf(base);
   const prev = seq[(si + seq.length - 1) % seq.length];
   const next = seq[(si + 1) % seq.length];
   const from = place(r.start);
+  /** the ride has a second start whose legs have been generated; without them the start line names one start */
+  const twoStarts = !!base.from && tripIn(base) !== null;
   const near = useMemo(() => {
-    const same = ridesIn(r.area).filter(x => x !== r);
-    return same.length ? same : RIDES.filter(x => x !== r).slice(0, 3);
-  }, [r]);
+    const same = ridesIn(base.area).filter(x => x !== base);
+    return same.length ? same : RIDES.filter(x => x !== base).slice(0, 3);
+  }, [base]);
 
   // hovering never fights the preview for the cursor
   const scrubTo = (v: Scrub) => {
@@ -101,8 +107,27 @@ export function RideView({ ride: r, seq, scrub, flying, hotPhoto, leg, onBack, o
       <p className="tagline">{r.tagline}</p>
       <p className="startline">
         <span className="mono">Starts</span>
-        <b>{r.start}</b>
+        {twoStarts && base.from ? (
+          // two ways to start, one choice for the whole guide: the figures, profile and map follow it
+          <span className="starts" role="group" aria-label="Where to start">
+            <button type="button" className={r.approach ? undefined : 'on'} aria-pressed={!r.approach} onClick={() => setRideIn(false)}>
+              {base.start}
+            </button>
+            <span className="or mono" aria-hidden="true">or</span>
+            <button type="button" className={r.approach ? 'on' : undefined} aria-pressed={!!r.approach} title="Ride in from here and back" onClick={() => setRideIn(true)}>
+              {base.from.start}
+              {base.from.transit && <i className="tr">{base.from.transit}</i>}
+            </button>
+          </span>
+        ) : (
+          <b>{r.start}{r.transit && <i className="tr">{r.transit}</i>}</b>
+        )}
       </p>
+      {r.approach && (
+        <p className="ridein-note mono">
+          {dist(r.approach.outMi, u)} {distUnit(u)} in from {r.transit ? '' : 'the '}{from}, {dist(r.approach.backMi, u)} {distUnit(u)} back
+        </p>
+      )}
       <div className="facts">
         <div><b>{dist(r.lengthMi, u)}</b><span className="mono">{distWord(u)}</span></div>
         <div><b>{elev(r.feet, u)}</b><span className="mono">{elevUnit(u)} of climbing</span></div>
