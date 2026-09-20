@@ -36,6 +36,8 @@ export default function App() {
   const ptab = useRef<HTMLButtonElement>(null);
   const chipStop = useRef<HTMLButtonElement>(null);
   const mapToggle = useRef<HTMLButtonElement>(null);
+  /** the compass turns with the map; written straight to the element, since a drag reports a bearing every frame */
+  const compass = useRef<HTMLButtonElement>(null);
   /** list scroll position to come back to after a ride: #side's on desktop, the window's on a phone */
   const listScroll = useRef(0);
   /** window scroll position to come back to when the phone map closes */
@@ -65,6 +67,12 @@ export default function App() {
       } else side.current!.scrollTo({ top: f.offsetTop - 24, behavior: scrollBehavior() });
     },
     onPerspective: setPerspective,
+    onBearing: deg => {
+      const el = compass.current;
+      if (!el) return;
+      el.style.transform = `rotate(${-deg}deg)`;
+      el.classList.toggle('turned', Math.abs(deg) > 0.5);
+    },
   }, ride);
   const { flying, toggle: toggleFlyover } = useFlyover(gm, ride, scrub);
   // the preview has nothing to play on once the phone's map layer is away, however it was closed
@@ -322,7 +330,24 @@ export default function App() {
       </button>
       <main id="mapwrap" ref={mapwrap}>
         <div id="map" ref={mapEl} />
-        <div className="compass" aria-hidden="true">N</div>
+        {/* a working compass: it turns with the map, and a click swings the map back to north */}
+        <button className="compass" ref={compass} title="Reset north" aria-label="Reset north" onClick={() => gm?.resetNorth()}>N</button>
+        {/* the reader's own camera moves, stacked under the compass the way every maps app does it */}
+        <div className="navstack" role="group" aria-label="Zoom">
+          <button title="Zoom in" aria-label="Zoom in" onClick={() => gm?.zoomIn()}>+</button>
+          <button title="Zoom out" aria-label="Zoom out" onClick={() => gm?.zoomOut()}>−</button>
+          {/* four corner brackets, never a crosshair: that glyph means "my location" in every maps app, and this site
+              never asks where the reader is. Mid-preview the camera is following the rider; framing is what stopping does. */}
+          <button
+            title={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
+            aria-label={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
+            onClick={() => (flying ? toggleFly() : gm?.fit())}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" />
+            </svg>
+          </button>
+        </div>
         <div className="mapctl">
           <div className="seg" role="group" aria-label="Map view">
             <span className="cap" aria-hidden="true">view</span>

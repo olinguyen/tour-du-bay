@@ -24,6 +24,8 @@ const PANEL_GAP_PX = 24;
 const TOGGLE_PX = 80;
 /** the pitch 3D tilts to, and how long the tilt takes */
 const PITCH = 42, TILT_MS = 900;
+/** how long the compass takes to swing back north, and a zoom button's step */
+const NORTH_MS = 600, ZOOM_MS = 350;
 
 export type Perspective = '2d' | '3d';
 
@@ -38,6 +40,8 @@ export interface GuideMapEvents {
   onPhotoClick(i: number): void;
   /** the map fell back to 2D because the terrain mesh could not load */
   onPerspective?(mode: Perspective): void;
+  /** the map turned: the compass follows (degrees clockwise from north, 0 when square) */
+  onBearing?(deg: number): void;
 }
 
 /** [lat, lng] as MapLibre wants it */
@@ -114,12 +118,14 @@ export class GuideMap {
       attributionControl: false,
       canvasContextAttributes: { antialias: true },
       pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-      // the guide's own controls handle zooming; the map keeps drag, wheel and keyboard
-      dragRotate: false,
-      pitchWithRotate: false,
+      // turning and tilting are 3D's: right-drag (or ctrl-drag) turns and tilts, two fingers twist and tilt,
+      // shift+arrows do both from the keyboard. allowTurning() switches them all off again in 2D.
+      dragRotate: true,
+      pitchWithRotate: true,
       touchZoomRotate: true,
+      touchPitch: true,
     }));
-    map.touchZoomRotate.disableRotation();
+    this.allowTurning(this.perspective === '3d');
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     const scale = new maplibregl.ScaleControl({ maxWidth: 80, unit: units.get() });
     map.addControl(scale, 'bottom-left');
@@ -146,6 +152,7 @@ export class GuideMap {
       if ((e as { sourceId?: string }).sourceId === SRC.terrain && this.perspective === '3d') this.setPerspective('2d');
     });
     map.on('zoom', () => this.paintNames());
+    map.on('rotate', () => this.events.onBearing?.(map.getBearing()));
 
     this.observer = new ResizeObserver(() => {
       map.resize();
@@ -313,21 +320,69 @@ export class GuideMap {
     return this.perspective;
   }
 
-  /** Tilt into 3D, or back down flat. The terrain mesh is only attached in 3D, so 2D costs no extra tiles. */
+  /**
+   * Tilt into 3D, or back down flat. The terrain mesh is only attached in 3D, so 2D costs no extra tiles.
+   * 2D is the atlas view, so it also squares the map back to north; 3D keeps whatever bearing the reader turned to,
+   * and choosing it again from 3D settles the tilt back to its default.
+   */
   setPerspective(mode: Perspective, animate = true) {
     this.attachTerrain(mode);
     storage.set(VIEW_KEY, mode);
-    if (!this.loaded || this.map.getPitch() === this.pitch()) return;
-    if (animate && !reducedMotion()) this.map.easeTo({ pitch: this.pitch(), duration: TILT_MS });
-    else this.map.jumpTo({ pitch: this.pitch() });
+    if (!this.loaded) return;
+    const to = mode === '2d' ? { pitch: 0, bearing: 0 } : { pitch: PITCH };
+    if (this.map.getPitch() === to.pitch && (to.bearing === undefined || this.map.getBearing() === 0)) return;
+    if (animate && !reducedMotion()) this.map.easeTo({ ...to, duration: TILT_MS });
+    else this.map.jumpTo(to);
   }
 
   /** the perspective's terrain mesh, without moving the camera: a caller that is already flying carries the pitch */
   private attachTerrain(mode: Perspective) {
     const changed = mode !== this.perspective;
     this.perspective = mode;
+    this.allowTurning(mode === '3d');
     if (changed) this.events.onPerspective?.(mode);
     if (this.loaded) this.map.setTerrain(mode === '3d' ? { source: SRC.terrain, exaggeration: 1 } : null);
+  }
+
+  /** 2D stays north-up and flat, so every way of turning or tilting the map (mouse, touch, keyboard) is 3D-only */
+  private allowTurning(on: boolean) {
+    const { dragRotate, touchZoomRotate, touchPitch, keyboard } = this.map;
+    if (on) {
+      dragRotate.enable();
+      touchZoomRotate.enableRotation();
+      touchPitch.enable();
+      keyboard.enableRotation();
+    } else {
+      dragRotate.disable();
+      touchZoomRotate.disableRotation();
+      touchPitch.disable();
+      keyboard.disableRotation();
+    }
+  }
+
+  // ---- the reader's own camera moves (compass, zoom and fit buttons)
+
+  /** swing back to north, keeping the tilt; the compass is the one way back once the map has been turned */
+  resetNorth() {
+    this.map.resetNorth({ duration: this.instant() ? 0 : NORTH_MS });
+  }
+
+  zoomIn() {
+    this.map.zoomIn({ duration: this.instant() ? 0 : ZOOM_MS });
+  }
+
+  zoomOut() {
+    this.map.zoomOut({ duration: this.instant() ? 0 : ZOOM_MS });
+  }
+
+  /** frame what is open: the ride, the region, or the whole guide */
+  fit() {
+    this.refit(0.9);
+  }
+
+  /** a running preview re-centres the camera every few frames, which would cut an eased move short: step instead */
+  private instant() {
+    return reducedMotion() || this.previewing;
   }
 
   /** the pitch the current perspective flies at; every camera move states it, so none undoes the tilt */
@@ -550,7 +605,9 @@ export class GuideMap {
   /** animate to bounds once the map has a view; before that, jump there */
   private fly(b: [LatLng, LatLng], duration: number, kind: 'home' | 'ride' | 'area') {
     this.view(() => {
-      const opts = { padding: this.pad(kind), pitch: this.pitch(), duration: reducedMotion() ? 0 : duration * 1000 };
+      // fitBounds squares the map unless told otherwise: in 3D the view the reader turned to survives a fit
+      const bearing = this.perspective === '3d' ? this.map.getBearing() : 0;
+      const opts = { padding: this.pad(kind), pitch: this.pitch(), bearing, duration: reducedMotion() ? 0 : duration * 1000 };
       this.map.fitBounds(box(b), opts);
     });
   }

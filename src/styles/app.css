@@ -142,13 +142,25 @@ body.regions .pf-leg{stroke:var(--ac-hot)}
 /* map */
 #mapwrap{position:relative;min-width:0}
 #map{position:absolute;inset:0}
-.compass{position:absolute;top:24px;right:28px;z-index:500;pointer-events:none;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em}
+/* the compass is a button: it turns with the map (App writes the rotation on it) and clicking it swings the map back
+   north. Square to north it has nothing to do, so it only reads as clickable once the map has been turned. */
+.compass{all:unset;display:block;box-sizing:border-box;position:absolute;top:20px;right:36px;z-index:500;padding:4px 6px;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em;transition:transform .15s linear;-webkit-tap-highlight-color:transparent}
+.compass.turned{cursor:pointer}
+.compass:focus-visible{outline:1px solid var(--route);outline-offset:2px;border-radius:50%}
 .compass::before{content:"";display:block;width:0;height:0;border:4.5px solid transparent;border-bottom:15px solid var(--label);border-top:0;margin:0 auto 5px}
 .compass::after{content:"";display:block;width:1px;height:18px;background:var(--label);margin:2px auto 0;opacity:.6}
 /* the reader's two standing choices, as a key card under the compass: how the map is drawn, and in what units.
    Built from the legend's vocabulary — paper, a hairline rule, an italic caption — so it reads as part of the map
    rather than as app chrome; the chosen value is marked with a route-coloured underline, never a filled cell. */
-.mapctl{position:absolute;top:100px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
+/* the reader's camera moves, as a narrow paper stack under the compass: zoom in, zoom out, frame. Actions live here
+   and settings in the key card below, so neither is mistaken for the other. */
+.navstack{position:absolute;top:96px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
+.navstack button{all:unset;cursor:pointer;box-sizing:border-box;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font:400 19px/1 var(--sans);color:var(--ink-2);transition:color .2s,background .2s}
+.navstack button+button{border-top:1px solid var(--rule)}
+.navstack button:hover{color:var(--ink);background:var(--hover)}
+.navstack button:focus-visible{outline:1px solid var(--route);outline-offset:-4px}
+.navstack button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.mapctl{position:absolute;top:222px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
 .mapctl .seg{display:flex;align-items:baseline;gap:14px;padding:7px 13px 8px}
 .mapctl .seg+.seg{border-top:1px solid var(--rule)}
 .mapctl .cap{flex:1;font:italic 400 14px/1 var(--serif);color:var(--ink-3)}
@@ -180,7 +192,7 @@ body.ride .mapchip{opacity:1;transform:none;pointer-events:auto}
 .mapchip button{all:unset;cursor:pointer;font:500 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);padding:2px 10px 2px 0;border-right:1px solid var(--rule)}
 .mapchip button:hover{color:var(--route)}
 .mapchip small{font:500 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.row,.ch,.sb,.grp-h,.topbar button,.preview,.also button,.pager button,.mapchip button,.mapctl button,.ptab,.start-dot,.photo-pin{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.row,.ch,.sb,.grp-h,.topbar button,.preview,.also button,.pager button,.mapchip button,.mapctl button,.navstack button,.compass,.ptab,.start-dot,.photo-pin{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 .grp-h:focus-visible,.topbar button:focus-visible,.preview:focus-visible,.also button:focus-visible,.pager button:focus-visible,.mapchip button:focus-visible,.mapctl button:focus-visible{outline:1px solid var(--route);outline-offset:4px}
 /* React mount point: let #side and #mapwrap lay out as direct children of body */
 #root{display:contents}
@@ -227,7 +239,10 @@ h2.grp-hd{margin:0;font:inherit}
   .facts b{font-size:36px}
   #mapwrap,html.float #mapwrap{position:fixed;inset:0;z-index:1200;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .2s,visibility 0s .2s}
   body.map-open #mapwrap{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .2s}
-  .compass,.legend,html.float .ptab,html.float.phide .ptab{display:none}
+  /* the compass gives up its corner on a phone, and comes back (under the ride chip) once the map has been turned */
+  /* pinch zooms on a phone, as in every maps app; the stack would only cover map */
+  .compass:not(.turned),.navstack,.legend,html.float .ptab,html.float.phide .ptab{display:none}
+  .compass{top:84px;right:16px;min-width:44px;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:0}
   html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
   html.float .maplibregl-ctrl-bottom-left,html.float.phide .maplibregl-ctrl-bottom-left{left:0}
   .mapctl{top:auto;right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}
