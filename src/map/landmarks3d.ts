@@ -29,10 +29,12 @@ import {
   Raycaster,
   RepeatWrapping,
   Scene,
+  ShapeUtils,
   SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
   TubeGeometry,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -160,8 +162,8 @@ interface Kit {
    * (angles in the x-z plane, x = cos): a curved wall, a lintel, a ring
    */
   sweep(profile: [number, number][], c: Vector3, r: number, a0: number, a1: number, segments: number, y0: number, mat: Material, pickable?: boolean): Mesh;
-  /** a flat polygon at height y, fanned from its first point, with an outline in a second material when given */
-  sheet(outline: [number, number][], y: number, mat: Material, edge?: Material): Mesh;
+  /** a flat polygon at height y, with holes and with an outline in a second material when given */
+  sheet(outline: [number, number][], y: number, mat: Material, edge?: Material, holes?: [number, number][][]): Mesh;
 }
 
 function kit(px: number, ground: Ground, mats: Mats): Kit {
@@ -220,21 +222,28 @@ function kit(px: number, ground: Ground, mats: Mats): Kit {
       g.computeVertexNormals();
       return add(g, mat, 0, 0, 0, pickable);
     },
-    sheet(outline, y, mat, edge) {
-      const pos: number[] = [];
+    sheet(outline, y, mat, edge, holes = []) {
+      const rings = [outline, ...holes];
+      const all = rings.flat();
+      const pos = all.flatMap(([x, z]) => [x, y, z]);
       const idx: number[] = [];
-      for (const [x, z] of outline) pos.push(x, y, z);
-      for (let i = 1; i < outline.length - 1; i++) idx.push(0, i + 1, i);
+      const v2 = (ring: [number, number][]) => ring.map(([x, z]) => new Vector2(x, z));
+      // every triangle faces up, whichever way its ring was wound
+      for (const [a, b, c] of ShapeUtils.triangulateShape(v2(outline), holes.map(v2))) {
+        const up = (all[c][0] - all[a][0]) * (all[b][1] - all[a][1]) - (all[c][1] - all[a][1]) * (all[b][0] - all[a][0]) > 0;
+        idx.push(a, up ? b : c, up ? c : b);
+      }
       const g = new BufferGeometry();
       g.setAttribute('position', new Float32BufferAttribute(pos, 3));
       g.setIndex(idx);
       g.computeVertexNormals();
-      if (edge) {
-        const e = new BufferGeometry();
-        e.setAttribute('position', new Float32BufferAttribute(pos, 3));
-        geoms.push(e);
-        group.add(new LineLoop(e, edge));
-      }
+      if (edge)
+        for (const ring of rings) {
+          const e = new BufferGeometry();
+          e.setAttribute('position', new Float32BufferAttribute(ring.flatMap(([x, z]) => [x, y, z]), 3));
+          geoms.push(e);
+          group.add(new LineLoop(e, edge));
+        }
       return add(g, mat, 0, 0, 0);
     },
   };
@@ -359,10 +368,11 @@ const goldenGate: Landmark = {
 
 /**
  * Sutro Tower on Mount Sutro: three lattice legs that lean in to a waist two thirds of the way up and flare out
- * again into the three antenna masts, banded red and white. 977 ft tall; the footprint and band heights are read
- * off photographs.
+ * again into the three antenna masts, banded red and white. 977 ft tall; the band heights are read off photographs.
+ * The origin is the centre of the tower's triangle in OpenStreetMap, whose legs stand 21 m out: one due west, the
+ * other two to the north-east and the south-east.
  */
-const SUTRO = frame(37.7553, -122.4528, 0);
+const SUTRO = frame(37.75524, -122.45286, 0);
 const sutroTower: Landmark = {
   name: 'Sutro Tower',
   frame: SUTRO,
@@ -376,8 +386,8 @@ const sutroTower: Landmark = {
     const base = ground(0, 0, 25);
     const H = 298;
     // the legs' distance from the centre by height above the base: splayed at the foot, a narrow waist, a wide top
-    const radius = (h: number) => (h < 190 ? 22 - 14 * (h / 190) : 8 + 7 * ((h - 190) / 72));
-    const angles = [Math.PI / 2, Math.PI / 2 + (2 * Math.PI) / 3, Math.PI / 2 + (4 * Math.PI) / 3];
+    const radius = (h: number) => (h < 190 ? 21 - 13 * (h / 190) : 8 + 7 * ((h - 190) / 72));
+    const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI) / 3, -Math.PI / 2 + (4 * Math.PI) / 3];
     const at = (h: number, a: number) => new Vector3(radius(h) * Math.cos(a), base + h, radius(h) * Math.sin(a));
     const bands = [0, 55, 110, 150, 190, 226, 262];
     const legW = w(3, 1.2);
@@ -397,7 +407,7 @@ const sutroTower: Landmark = {
 /**
  * Alcatraz: the island is in the terrain and the water data already (its outline gives the frame: x along the island
  * towards the south-east, z across to the south-west). The cellhouse on the plateau, the lighthouse beside it, the
- * water tower and the industries building at the north-west end, the barracks at the dock.
+ * water tower and the two industries buildings at the north-west end, the barracks at the dock.
  */
 const ALCATRAZ = frame(37.82685, -122.4228, 126.6);
 const alcatraz: Landmark = {
@@ -410,43 +420,62 @@ const alcatraz: Landmark = {
   postcard: { center: ALCATRAZ.at(0, 0), zoom: 15.5, pitch: 60, bearing: -45 },
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
-    // the cellhouse, three storeys with a raised centre
-    const top = ground(-20, 10, 40);
-    column(-20, 10, 150, 45, top, top + 17, mats.stone, true);
+    // footprints from OpenStreetMap, as centre, size and turn in the island's frame; the prison stands 9° off its axis
+    const block = (x: number, z: number, lx: number, lz: number, turn: number, h: number, pickable = false) => {
+      const y = ground(x, z, Math.min(lx, lz) / 2);
+      column(x, z, lx, lz, y, y + h, mats.stone, pickable).rotation.y = (-turn * Math.PI) / 180;
+      return y;
+    };
+    // the cellhouse, three storeys with a raised centre, the administration block at its south-east end and the
+    // dining hall at the other
+    const top = block(5, 27, 65, 49, 9, 17, true);
     // the ridge starts inside the block below it: two faces at the same height would flicker against each other
-    add(new BoxGeometry(150, 4, 22), mats.stone, -20, top + 18, 10);
+    add(new BoxGeometry(65, 4, 22), mats.stone, 5, top + 18, 27).rotation.y = (-9 * Math.PI) / 180;
+    block(46, 26, 15, 35, 9, 11);
+    block(-53, 18, 52, 20, 9, 9);
     // the lighthouse, an octagonal concrete tower with its lantern
-    const lh = ground(65, 25, 6);
-    cylinder(65, 25, w(2.6, 0.8), w(3.4, 0.8), lh, lh + 23, mats.stone, 8, true);
-    cylinder(65, 25, w(2.2, 0.8), w(2.2, 0.8), lh + 23, lh + 25.6, mats.dark, 8);
-    // the water tower at the north-west end: a tank on four legs
-    const wt = ground(-150, -20, 8);
-    for (const [dx, dz] of [[-4, -4], [4, -4], [4, 4], [-4, 4]]) bar(new Vector3(-150 + dx, wt, -20 + dz), new Vector3(-150 + dx * 0.7, wt + 18, -20 + dz * 0.7), w(0.8, 0.6), mats.concrete);
-    cylinder(-150, -20, 5.5, 5.5, wt + 18, wt + 27, mats.concrete, 16);
-    // the industries building along the north-west shore, and the barracks above the dock on the bay side
-    const ind = ground(-190, 20, 12);
-    column(-190, 20, 80, 22, ind, ind + 12, mats.stone);
-    const dock = ground(90, -55, 12);
-    column(90, -55, 100, 22, dock, dock + 14, mats.stone);
+    const lh = ground(75, 27, 4);
+    cylinder(75, 27, w(2.6, 0.8), w(3.4, 0.8), lh, lh + 23, mats.stone, 8, true);
+    cylinder(75, 27, w(2.2, 0.8), w(2.2, 0.8), lh + 23, lh + 25.6, mats.dark, 8);
+    // the water tower north-west of the cellhouse: a tank on four legs
+    const wt = ground(-128, -5, 6);
+    for (const [dx, dz] of [[-4, -4], [4, -4], [4, 4], [-4, 4]]) bar(new Vector3(-128 + dx, wt, -5 + dz), new Vector3(-128 + dx * 0.7, wt + 18, -5 + dz * 0.7), w(0.8, 0.6), mats.concrete);
+    cylinder(-128, -5, 5.5, 5.5, wt + 18, wt + 27, mats.concrete, 16);
+    // the two industries buildings along the north-west shore, and the barracks (Building 64) above the dock
+    block(-173, 41, 93, 21, 24, 12);
+    block(-254, 33, 42, 29, 0, 12);
+    block(88, -43, 86, 22, 0, 14);
   },
 };
 
 /**
- * The Palace of Fine Arts: the rotunda is the origin, and the colonnade and the exhibition hall behind it curve
- * around the lagoon to its east (x north, z east). Dimensions from the National Register description as given by
- * SAH Archipedia and the state landmark record: the rotunda an open octagon 160 ft across and 162 ft to the top of
- * its dome on eight piers, each with a pair of Corinthian columns outside and one inside; the colonnade two rows
- * of columns under a lintel with planter boxes on groups of four columns and the weeping maidens at their corners;
- * the exhibition hall 135 ft wide and 45 ft at its crown, 950 ft along its face. The lagoon is sketched.
+ * The Palace of Fine Arts: the rotunda is the origin, on the lagoon's west shore, and the site's axis runs 10° west
+ * of north with the Marina's streets (x along it, z across it to the lagoon). The colonnade and the exhibition hall
+ * behind it are arcs about one centre, 65 m out in the lagoon: the colonnade 97 m from it, from the rotunda's
+ * shoulders round to 55° each side, where it turns to run straight to the lagoon and then out along it to a pylon;
+ * the hall from 116 m to 157 m, 60° each side. That plan and the lagoon's outline are OpenStreetMap's. Dimensions
+ * from the National Register description as given by SAH Archipedia and the state landmark record: the rotunda an
+ * open octagon 160 ft across and 162 ft to the top of its dome on eight piers, each with a pair of Corinthian
+ * columns outside and one inside; the colonnade two rows of columns under a lintel with planter boxes on groups of
+ * four columns and the weeping maidens at their corners; the exhibition hall 135 ft wide and 45 ft at its crown.
  */
-const PALACE = frame(37.80292, -122.44843, 0);
-/** the arc the colonnade and hall follow: its centre lies out in the lagoon, so the rotunda sits at angle -90° */
-const ARC = new Vector3(0, 0, 240);
-const ARC_R = ARC.z;
-const onArc = (s: number, r: number) => {
-  const a = -Math.PI / 2 + s / ARC_R;
+const PALACE = frame(37.80292, -122.44843, -10);
+const ARC = new Vector3(0, 0, 65);
+const ARC_R = 97;
+const DEG = Math.PI / 180;
+/** a point on a circle about the arc's centre, by its angle from the axis through the rotunda */
+const onArc = (deg: number, r: number) => {
+  const a = -Math.PI / 2 + deg * DEG;
   return { a, x: ARC.x + r * Math.cos(a), z: ARC.z + r * Math.sin(a) };
 };
+const LAGOON: [number, number][] = [
+  [101, 65], [123, 61], [126, 64], [123, 71], [123, 85], [108, 101], [78, 112], [58, 104], [35, 114], [-7, 111], [-11, 109], [-13, 100],
+  [-18, 97], [-31, 100], [-53, 113], [-57, 112], [-66, 104], [-80, 108], [-90, 98], [-99, 95], [-107, 80], [-116, 86], [-120, 86], [-121, 80],
+  [-118, 73], [-120, 65], [-110, 51], [-100, 42], [-77, 40], [-70, 37], [-66, 31], [-68, 13], [-65, 5], [-52, -7], [-41, -12], [-37, -10],
+  [-35, -3], [-40, 17], [-37, 32], [-28, 39], [-2, 50], [23, 40], [37, 30], [39, 20], [34, 6], [34, -2], [38, -9], [47, -9], [62, 3], [67, 11],
+  [66, 34], [72, 48], [85, 42], [98, 44], [101, 51], [88, 53], [88, 58], [90, 62],
+];
+const LAGOON_ISLAND: [number, number][] = [[99, 75], [79, 76], [59, 81], [58, 93], [66, 98], [107, 92], [112, 80]];
 const palaceOfFineArts: Landmark = {
   name: 'Palace of Fine Arts',
   frame: PALACE,
@@ -454,11 +483,11 @@ const palaceOfFineArts: Landmark = {
     const u = units.get();
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
-  postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -95 },
+  postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -100 },
   build(k) {
     const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
     // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
-    const g = Math.max(ground(0, 0), ground(140, 45), ground(-140, 45), ground(0, -70), ground(0, 110));
+    const g = Math.max(ground(0, 0), ground(80, 20), ground(-80, 20), ground(0, -70), ground(0, 80));
     const colR = w(0.75, 0.45);
     const shaft = (x: number, z: number, y0: number, y1: number) => cylinder(x, z, colR, colR * 1.15, y0, y1, mats.ochre, 6);
 
@@ -481,46 +510,61 @@ const palaceOfFineArts: Landmark = {
     ring(R - 1.5, w(1.3, 0.5), 26, 32.5);
     add(new SphereGeometry(17, 24, 12, 0, 2 * Math.PI, 0, Math.PI / 2), mats.terracotta, 0, g + 32.5, 0, true);
 
-    // the colonnade, out to 150 m each side of the rotunda: two rows of columns 30 ft apart under a lintel, a planter
-    // box on four columns every 45 m with the maidens at its corners, and a pylon at each end
-    const ROW = 4.5, TOP = 13, LINTEL = 15.5;
-    const lintel: [number, number][] = [[-w(0.9, 0.4), TOP], [-w(0.9, 0.4), LINTEL], [w(0.9, 0.4), LINTEL], [w(0.9, 0.4), TOP], [-w(0.9, 0.4), TOP]];
+    // the colonnade: two rows of columns under a lintel, 15° to 55° round the arc each side of the rotunda, then
+    // straight to the lagoon and out along it; a planter box on four columns with the maidens at its corners at
+    // intervals and at each turn, and a pylon at each end
+    const TOP = 13, LINTEL = 15.5, STEP = 4.6, TURN = 55, SHORE = 32, END = 107;
+    const hw = w(0.9, 0.4);
+    const lintel: [number, number][] = [[-hw, TOP], [-hw, LINTEL], [hw, LINTEL], [hw, TOP], [-hw, TOP]];
+    /** a straight run of one row: its columns and its lintel, which stops short of b so that two runs meet without overlapping */
+    const run = (ax: number, az: number, bx: number, bz: number) => {
+      const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+      for (let d = STEP; d < len; d += STEP) shaft(ax + ux * d, az + uz * d, g, g + TOP);
+      const l = len - hw;
+      column(ax + (ux * l) / 2, az + (uz * l) / 2, Math.abs(ux) * l + Math.abs(uz) * 2 * hw, Math.abs(uz) * l + Math.abs(ux) * 2 * hw, g + TOP, g + LINTEL, mats.ochre, true);
+    };
+    const planter = (x: number, z: number, across: number, turn: number) => {
+      const c = Math.cos(turn), sn = Math.sin(turn);
+      column(x, z, 8, across + 3, g + LINTEL, g + LINTEL + 4.5, mats.ochre, true).rotation.y = -turn;
+      for (const dx of [-3, 3])
+        for (const dz of [-across / 2 - 1, across / 2 + 1]) cylinder(x + dx * c - dz * sn, z + dx * sn + dz * c, w(0.5, 0.35), w(0.6, 0.35), g + LINTEL + 4.5, g + LINTEL + 7.5, mats.stone, 6);
+    };
     for (const side of [-1, 1]) {
-      for (const r of [ARC_R - ROW, ARC_R + ROW]) {
-        sweep(lintel, ARC, r, onArc(26 * side, r).a, onArc(150 * side, r).a, 24, g, mats.ochre, true);
-        for (let s = 26; s <= 150; s += 4.6) {
-          const p = onArc(s * side, r);
+      const rows = [ARC_R - 4.5, ARC_R + 4.5];
+      for (const r of rows) {
+        sweep(lintel, ARC, r, onArc(15 * side, r).a, onArc(TURN * side, r).a, 16, g, mats.ochre, true);
+        for (let deg = 15; deg <= TURN; deg += STEP / r / DEG) {
+          const p = onArc(deg * side, r);
           shaft(p.x, p.z, g, g + TOP);
         }
       }
-      for (const sb of [45, 90, 135]) {
-        const p = onArc(sb * side, ARC_R);
-        column(p.x, p.z, 8, 2 * ROW + 3, g + LINTEL, g + LINTEL + 4.5, mats.ochre, true).rotation.y = -p.a - Math.PI / 2;
-        for (const ds of [-3, 3])
-          for (const dr of [-ROW - 1, ROW + 1]) {
-            const q = onArc(sb * side + ds, ARC_R + dr);
-            cylinder(q.x, q.z, w(0.5, 0.35), w(0.6, 0.35), g + LINTEL + 4.5, g + LINTEL + 7.5, mats.stone, 6);
-          }
+      for (const deg of [20, 31.5, 43]) {
+        const p = onArc(deg * side, ARC_R);
+        planter(p.x, p.z, 9, p.a + Math.PI / 2);
       }
-      const e = onArc(155 * side, ARC_R);
-      column(e.x, e.z, 7, 11, g, g + 19, mats.ochre, true).rotation.y = -e.a - Math.PI / 2;
+      // the straight runs carry on from where the two rows leave the arc, so they stand a little closer together;
+      // the row on the inside of the turn is the shorter one
+      const [inner, outer] = rows.map((r) => onArc(TURN * side, r));
+      const gap = Math.abs(outer.x - inner.x) / 2;
+      run(inner.x, inner.z, inner.x, SHORE + gap);
+      run(outer.x, outer.z, outer.x, SHORE - gap);
+      run(inner.x, SHORE + gap, END * side, SHORE + gap);
+      run(outer.x, SHORE - gap, END * side, SHORE - gap);
+      const mid = (inner.x + outer.x) / 2;
+      planter(mid, (inner.z + outer.z) / 2 + 2, 2 * gap, Math.PI / 2);
+      planter(mid, SHORE, 2 * gap, Math.PI / 2);
+      column((END + 3.5) * side, SHORE, 7, 11, g, g + 19, mats.ochre, true);
     }
 
     // the exhibition hall behind the colonnade: 135 ft wide, 45 ft to the crown of its arched roof
-    const HALL = ARC_R + 30, half = 145 / HALL;
-    const ha0 = -Math.PI / 2 - half, ha1 = -Math.PI / 2 + half;
+    const HALL = 116;
+    const ha0 = onArc(-60, HALL).a, ha1 = onArc(60, HALL).a;
     sweep([[0, 0], [0, 9], [41, 9], [41, 0], [0, 0]], ARC, HALL, ha0, ha1, 24, g, mats.stone, true);
     sweep([[0, 9], [3, 11.2], [9, 12.8], [20.5, 13.7], [32, 12.8], [38, 11.2], [41, 9]], ARC, HALL, ha0, ha1, 24, g, mats.roof, true);
     for (const a of [ha0, ha1]) column(ARC.x + (HALL + 20.5) * Math.cos(a), ARC.z + (HALL + 20.5) * Math.sin(a), 41, 1.2, g, g + 13.2, mats.stone).rotation.y = -a;
 
-    // the lagoon, sketched: it fills the curve of the colonnade, wider in the middle, with an irregular far shore
-    const shore: [number, number][] = [];
-    for (let s = -128; s <= 128; s += 16) {
-      const p = onArc(s, ARC_R - 14 - 0.15 * Math.abs(s));
-      shore.push([p.x, p.z]);
-    }
-    for (const xz of [[128, 78], [110, 98], [85, 114], [55, 126], [20, 130], [-15, 124], [-45, 120], [-75, 112], [-100, 100], [-120, 82]] as [number, number][]) shore.push(xz);
-    sheet(shore, g + 1, mats.water, mats.shore);
+    // the lagoon and its island
+    sheet(LAGOON, g + 1, mats.water, mats.shore, [LAGOON_ISLAND]);
   },
 };
 

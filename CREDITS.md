@@ -32,4 +32,6 @@ glyph server, and so makes no request to any hosted map service.
 [three.js](https://threejs.org/) under the [MIT licence](https://github.com/mrdoob/three.js/blob/dev/LICENSE), an
 ordinary npm dependency that the page loads only once the reader is in 3D. Every model is built in code from published
 dimensions (the bridge district's for the Golden Gate Bridge, the National Register descriptions for the rest): no
-model file, texture or photograph is downloaded, and the Palace of Fine Arts' lagoon is a sketch, not survey data.
+model file, texture or photograph is downloaded. Where Sutro Tower, the buildings on Alcatraz and the Palace of Fine
+Arts stand, the Palace's plan and the outline of its lagoon are measured from OpenStreetMap's building and water
+outlines (© OpenStreetMap contributors, ODbL, as above; retrieved September 20, 2026).
