@@ -74,6 +74,7 @@ export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapE
         onPhotoClick: i => latest.current.onPhotoClick(i),
         onPerspective: m => latest.current.onPerspective?.(m),
         onBearing: b => latest.current.onBearing?.(b),
+        onFit: m => latest.current.onFit?.(m),
       },
       first.current ?? undefined,
     );

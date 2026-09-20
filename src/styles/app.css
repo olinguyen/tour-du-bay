@@ -157,21 +157,28 @@ body.regions .pf-leg{stroke:var(--ac-hot)}
 .compass:focus-visible{outline:1px solid var(--route);outline-offset:2px;border-radius:50%}
 .compass::before{content:"";display:block;width:0;height:0;border:4.5px solid transparent;border-bottom:15px solid var(--label);border-top:0;margin:0 auto 5px}
 .compass::after{content:"";display:block;width:1px;height:18px;background:var(--label);margin:2px auto 0;opacity:.6}
-/* the reader's two standing choices, as a key card under the compass: how the map is drawn, and in what units.
-   Built from the legend's vocabulary — paper, a hairline rule, an italic caption — so it reads as part of the map
-   rather than as app chrome; the chosen value is marked with a route-coloured underline, never a filled cell. */
 /* the reader's camera moves, as a narrow paper stack under the compass: zoom in, zoom out, frame. Actions live here
-   and settings in the key card below, so neither is mistaken for the other. */
+   and settings in the key strip along the bottom, so neither is mistaken for the other. */
 .navstack{position:absolute;top:96px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
 .navstack button{all:unset;cursor:pointer;box-sizing:border-box;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font:400 19px/1 var(--sans);color:var(--ink-2);transition:color .2s,background .2s}
 .navstack button+button{border-top:1px solid var(--rule)}
 .navstack button:hover{color:var(--ink);background:var(--hover)}
 .navstack button:focus-visible{outline:1px solid var(--route);outline-offset:-4px}
 .navstack button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.mapctl{position:absolute;top:222px;right:28px;z-index:500;display:flex;flex-direction:column;background:var(--page);border:1px solid var(--ink)}
-.mapctl .seg{display:flex;align-items:baseline;gap:14px;padding:7px 13px 8px}
-.mapctl .seg+.seg{border-top:1px solid var(--rule)}
-.mapctl .cap{flex:1;font:italic 400 14px/1 var(--serif);color:var(--ink-3)}
+/* the fit button's needle: shown between the brackets while a press will face north rather than frame */
+.navstack button svg .n{display:none;fill:currentColor;stroke:none}
+.navstack button.north svg .n{display:block}
+/* the reader's three standing choices — how the map is drawn, where a ride starts, and in what units — as one key
+   strip along the bottom-right, across from the legend: the legend says what the marks mean, the strip how they are
+   read. Built from the legend's vocabulary — paper, a hairline rule, an italic caption — so it reads as part of the
+   map rather than as app chrome; the chosen value is marked with a route-coloured underline, never a filled cell.
+   A pill like the ride chip in the opposite corner, and 44 px tall, so it lives inside the band a ride's fit already
+   keeps clear at the bottom (GuideMap pad). Where the window is too narrow for it beside the legend, the strip folds
+   into a stacked card in the same corner. */
+.mapctl{position:absolute;right:28px;bottom:52px;z-index:500;display:flex;align-items:stretch;background:var(--page);border:1px solid var(--ink)}
+.mapctl .seg{display:flex;align-items:baseline;gap:12px;padding:9px 16px 10px}
+.mapctl .seg+.seg{border-left:1px solid var(--rule)}
+.mapctl .cap{font:italic 400 14px/1 var(--serif);color:var(--ink-3)}
 .mapctl button{all:unset;position:relative;cursor:pointer;box-sizing:border-box;min-width:24px;text-align:center;padding:3px 0 5px;font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);transition:color .25s}
 .mapctl button::after{content:"";position:absolute;left:0;right:0;top:calc(50% + 8px);height:1.5px;background:var(--route);opacity:0;transition:opacity .25s}
 .mapctl button:hover{color:var(--ink)}
@@ -219,6 +226,13 @@ body.ride .mapchip{opacity:1;transform:none;pointer-events:auto}
 #root{display:contents}
 #pf{touch-action:pan-y}
 img.ph{display:block;width:100%;object-fit:cover;padding:0}
+/* the strip beside the legend's longest line needs about 1340 px; under that it is the stacked card */
+@media (max-width:1340px){
+  .mapctl{flex-direction:column}
+  .mapctl .seg{gap:14px;padding:7px 13px 8px}
+  .mapctl .seg+.seg{border-left:0;border-top:1px solid var(--rule)}
+  .mapctl .cap{flex:1}
+}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
@@ -266,7 +280,7 @@ h2.grp-hd{margin:0;font:inherit}
   .compass{top:84px;right:16px;min-width:44px;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:0}
   html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
   html.float .maplibregl-ctrl-bottom-left,html.float.phide .maplibregl-ctrl-bottom-left{left:0}
-  .mapctl{top:auto;right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}
+  .mapctl{right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}
   .mapctl .seg{padding:0 14px;gap:14px;align-items:center}
   .mapctl button{min-height:44px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;padding:0}
   /* the chip is the way back to the list from the map: give its buttons a full tap target */
