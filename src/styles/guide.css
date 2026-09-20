@@ -43,6 +43,7 @@ h1,h2,h3,p{margin:0}
 .maplibregl-popup.ride-tip .maplibregl-popup-content{background:var(--page);color:var(--ink);border:1px solid var(--ink);border-radius:0;box-shadow:none;font:400 17px/1.15 var(--display);letter-spacing:-.005em;padding:7px 12px 8px}
 .maplibregl-popup.ride-tip .maplibregl-popup-content small{display:block;font:500 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-top:4px;font-variant-numeric:tabular-nums}
 .start-dot{width:24px;height:24px;border-radius:50%;background:var(--page);border:1.5px solid var(--route);box-shadow:0 0 0 2px var(--halo);transform:translate(-50%,-50%)}
+.from-dot{position:relative;width:14px;height:14px;border-radius:50%;background:var(--page);border:1.5px solid var(--route);box-shadow:0 0 0 2px var(--halo);transform:translate(-50%,-50%)}
 .rider{transition:opacity .3s;width:13px;height:13px;border-radius:50%;background:var(--route-hot);border:2px solid var(--page);box-shadow:0 1px 5px rgba(0,0,0,.3);transform:translate(-50%,-50%)}
 .photo-pin{position:relative;transform:translate(-50%,-100%);cursor:pointer;transition:opacity .5s}
 .photo-pin i{display:block;width:24px;height:24px;background:var(--page);border:1px solid var(--ink);border-radius:50%;font:italic 400 13px/22px var(--display);text-align:center;color:var(--ink);transition:transform .2s,background .2s,color .2s}

@@ -8,7 +8,7 @@ import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, MapLabel, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion, storage } from '../lib/html';
-import { areaSlug, climbs, pad2 } from '../lib/route';
+import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
@@ -83,6 +83,8 @@ export class GuideMap {
   private readonly tip: maplibregl.Popup;
   private readonly unwatchUnits: () => void;
   private pins: Marker[] = [];
+  /** the station (or the Panhandle) the open ride is being ridden in from, when it is */
+  private fromDot: Marker | null = null;
   private ride: Ride | null = null;
   private area: Area | null = null;
   private hot: string | null = null;
@@ -183,6 +185,17 @@ export class GuideMap {
 
     const state = (key: string) => ['boolean', ['feature-state', key], false] as unknown as maplibregl.ExpressionSpecification;
     const hot = state('hot'), faint = state('faint'), dim = state('dim');
+    // the way in from the station: the ride's own colour, thinner and lighter, under the ride itself. Not dashed:
+    // the way there and the way back run the same road for most of their length, and two dashed lines in opposite
+    // directions read as one solid one where their dashes interleave.
+    map.addLayer({ id: LYR.approachHalo, type: 'line', source: SRC.approach, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': pal.halo, 'line-width': 5, 'line-opacity': 0.7 } });
+    map.addLayer({
+      id: LYR.approach,
+      type: 'line',
+      source: SRC.approach,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': 0.6 },
+    });
     map.addLayer({
       id: LYR.routeHalo,
       type: 'line',
@@ -390,6 +403,7 @@ export class GuideMap {
     return this.perspective === '3d' ? PITCH : 0;
   }
 
+  /** a ride as planned, or the same ride in from its alternative start: a different object, drawn afresh */
   openRide(ride: Ride) {
     if (ride === this.ride) return;
     this.resetRide();
@@ -398,6 +412,13 @@ export class GuideMap {
     this.paint();
 
     const colour = this.hotColour(ride);
+    if (ride.approach) {
+      this.setData(SRC.approach, ride.approach.lines.map(l => ({ ...line(l), properties: { color: this.colour(ride) } })));
+      // the station is the trip's own start; the ride's numbered dot stays where the ride itself begins
+      const html = `<div class="from-dot${ride.transit ? ' transit' : ''}" data-area="${esc(areaSlug(ride.area))}"><em>${esc(place(ride.start))}</em></div>`;
+      this.fromDot = marker(this.map, ride.route[0], html);
+    }
+    document.body.classList.toggle('ridein', !!ride.approach);
     this.setData(SRC.climbs, climbs(ride).map(({ a, b }) => ({ ...line(sliceBetween(ride.route, ride.cum, a, b)), properties: { color: colour } })));
     this.pins = ride.photos.map((ph, i) => {
       const m = marker(this.map, pointAt(ride.route, ride.cum, ph.f), `<i>${i + 1}</i>`, 'photo-pin');
@@ -524,6 +545,10 @@ export class GuideMap {
     return (this.pal.area[areaSlug(r.area)] ?? { hot: this.pal.routeHot }).hot;
   }
 
+  private colour(r: Ride) {
+    return (this.pal.area[areaSlug(r.area)] ?? { base: this.pal.route }).base;
+  }
+
   private setData(id: string, features: Feature[]) {
     const src = this.map.getSource(id) as maplibregl.GeoJSONSource | undefined;
     src?.setData(collection(features));
@@ -535,6 +560,10 @@ export class GuideMap {
     this.flying = this.previewing = false;
     for (const m of this.pins) m.remove();
     this.pins = [];
+    this.fromDot?.remove();
+    this.fromDot = null;
+    this.setData(SRC.approach, []);
+    document.body.classList.remove('ridein');
     this.setData(SRC.climbs, []);
     this.setData(SRC.leg, []);
     this.setData(SRC.progress, []);
@@ -552,7 +581,9 @@ export class GuideMap {
       const dot = this.starts.get(r.slug)?.getElement().firstElementChild;
       let s: { hot: boolean; dim: boolean; faint: boolean };
       if (ride) {
-        s = { hot: r === ride, dim: r === ride && this.flying, faint: r !== ride };
+        // the open ride may be the trip in from the station, a different object for the same ride
+        const open = r.slug === ride.slug;
+        s = { hot: open, dim: open && this.flying, faint: !open };
         dot?.classList.remove('hot');
         dot?.classList.toggle('dim', !inArea);
       } else {

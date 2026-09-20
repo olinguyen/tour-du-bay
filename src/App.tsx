@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ListView, sequence, type Sort } from './components/ListView';
 import { RideView } from './components/RideView';
-import { findRide } from './data/guide';
+import { findRide, rideIn } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
 import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
 import { savedPerspective, type Perspective } from './map/GuideMap';
 import { scrollBehavior } from './lib/html';
 import { dist, distUnit, elev, elevUnit, setUnits, useUnits, type Unit } from './lib/measure';
+import { useRideIn } from './lib/ridein';
+import { place } from './lib/route';
 import { createStore, type Scrub } from './lib/store';
 
 const TITLE = document.title;
@@ -14,6 +16,10 @@ const TITLE = document.title;
 export default function App() {
   const [slug, navigate] = useHashRoute();
   const ride = findRide(slug) ?? null;
+  /** ride in from the station rather than start where the ride does: one choice for the whole guide */
+  const ridein = useRideIn();
+  /** what the page and the map show for the open ride: the ride as planned, or the trip in from its other start */
+  const trip = useMemo(() => (ride && ridein && rideIn(ride)) || ride, [ride, ridein]);
   const [area, setArea] = useState<Area | null>(null);
   const [sort, setSort] = useState<Sort>({ key: 'miles', dir: 1 });
   const [hot, setHot] = useState<string | null>(null);
@@ -73,8 +79,8 @@ export default function App() {
       el.style.transform = `rotate(${-deg}deg)`;
       el.classList.toggle('turned', Math.abs(deg) > 0.5);
     },
-  }, ride);
-  const { flying, toggle: toggleFlyover } = useFlyover(gm, ride, scrub);
+  }, trip);
+  const { flying, toggle: toggleFlyover } = useFlyover(gm, trip, scrub);
   // the preview has nothing to play on once the phone's map layer is away, however it was closed
   useEffect(() => {
     if (isMobile && !mapOpen && flying) toggleFlyover();
@@ -90,7 +96,7 @@ export default function App() {
   }, [toggleFlyover]);
 
   // highlight the photo nearest the scrub position; subscribes to a primitive so only changes re-render
-  const nearPhoto = useSyncExternalStore(scrub.subscribe, () => nearestPhoto(ride, scrub.get()));
+  const nearPhoto = useSyncExternalStore(scrub.subscribe, () => nearestPhoto(trip, scrub.get()));
   const hotPhoto = photoHover ?? nearPhoto;
   const collapsed = panelHidden || (flying && !peek);
   live.current = { collapsed, flying, mobile: isMobile, mapOpen, ride };
@@ -111,6 +117,11 @@ export default function App() {
     document.body.classList.toggle('ride', !!ride);
     document.title = ride ? `${ride.name} — Tour du Bay` : TITLE;
   }, [ride, scrub]);
+  // the other trip has its own distances: a leg or a scrub position of the old one would land somewhere else on it
+  useEffect(() => {
+    setLeg(null);
+    scrub.set(null);
+  }, [trip, scrub]);
 
   // the view that held focus was replaced: move focus to the new heading, or back to the ride's row
   const lastRide = useRef(ride);
@@ -135,14 +146,14 @@ export default function App() {
   useEffect(() => gm?.setMobile(isMobile), [gm, isMobile]);
   useEffect(() => gm?.setHot(hot), [gm, hot]);
   useEffect(() => gm?.setArea(area), [gm, area]);
-  useEffect(() => void (ride ? gm?.openRide(ride) : gm?.closeRide()), [gm, ride]);
-  useEffect(() => gm?.setHotPhoto(hotPhoto), [gm, hotPhoto, ride]);
+  useEffect(() => void (trip ? gm?.openRide(trip) : gm?.closeRide()), [gm, trip]);
+  useEffect(() => gm?.setHotPhoto(hotPhoto), [gm, hotPhoto, trip]);
   useEffect(() => gm?.setLeg(leg), [gm, leg]);
   useEffect(() => {
     if (!gm) return;
     gm.setRider(scrub.get()?.f ?? null);
     return scrub.subscribe(() => gm.setRider(scrub.get()?.f ?? null));
-  }, [gm, scrub, ride]);
+  }, [gm, scrub, trip]);
 
   // ---- panel hide ( [ ); the preview also tucks it away while it runs
   const refitOnPanel = useRef(false);
@@ -262,7 +273,7 @@ export default function App() {
 
   // the map chip keeps showing the last ride while it fades out
   const chipRide = useRef<Ride | null>(null);
-  if (ride) chipRide.current = ride;
+  if (trip) chipRide.current = trip;
 
   return (
     <>
@@ -286,10 +297,11 @@ export default function App() {
           if (!ride) listScroll.current = e.currentTarget.scrollTop;
         }}
       >
-        {ride ? (
+        {ride && trip ? (
           <RideView
             key={ride.slug}
-            ride={ride}
+            ride={trip}
+            base={ride}
             seq={seq}
             scrub={scrub}
             flying={flying}
@@ -392,6 +404,7 @@ export default function App() {
             <div><b className="tr" />a start you can reach by BART</div>
           </div>
           <div className="l-ride">
+            {trip?.approach && <div><i className="ap" />the way in from {trip.transit ?? `the ${place(trip.start)}`}</div>}
             <div><i className="cl" />climbs steeper than 6%</div>
             <div><b />viewpoints</div>
             <div><span style={{ display: 'inline-block', width: 23 }} />hover the profile to move along the route</div>
