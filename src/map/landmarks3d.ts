@@ -13,6 +13,7 @@ import {
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
+  EdgesGeometry,
   Float32BufferAttribute,
   Group,
   HemisphereLight,
@@ -26,6 +27,7 @@ import {
   MeshLambertMaterial,
   type Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   Raycaster,
   RepeatWrapping,
   Scene,
@@ -86,6 +88,9 @@ interface Mats {
   shadow: Material;
   /** the open screen that carries a glass tower's walls on past its roof */
   crown: Material;
+  /** PROTOTYPE (?landmark=big): a soft shadow laid on the ground, and an inked edge on the main masses */
+  shadow2: Material;
+  ink: Material;
 }
 
 function materials(): Mats {
@@ -130,7 +135,17 @@ function materials(): Mats {
       c.fillStyle = band;
       c.fillRect(0, from, 4, to - from);
     });
+  const blob = canvas(64, 64, c => {
+    const g = c.createRadialGradient(32, 32, 2, 32, 32, 32);
+    g.addColorStop(0, 'rgba(60,45,25,0.42)');
+    g.addColorStop(0.6, 'rgba(60,45,25,0.2)');
+    g.addColorStop(1, 'rgba(60,45,25,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 64, 64);
+  });
   return {
+    shadow2: new MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
+    ink: new LineBasicMaterial({ color: css('--ink', '#2a241c'), transparent: true, opacity: 0.3 }),
     quartz: new MeshLambertMaterial({ map: storey('#f3f0e8', '#8d969a', 5, 11) }),
     glass: new MeshLambertMaterial({ map: storey('#c6d6dd', '#f6f8f7', 0, 6) }),
     aluminium: new MeshLambertMaterial({ color: '#cdd2d3' }),
@@ -191,7 +206,7 @@ interface Kit {
   sheet(outline: [number, number][], y: number, mat: Material, edge?: Material, holes?: [number, number][][]): Mesh;
 }
 
-function kit(px: number, ground: Ground, mats: Mats): Kit {
+function kit(px: number, ground: Ground, mats: Mats, inked = false): Kit {
   const group = new Group();
   const geoms: BufferGeometry[] = [];
   const pick: Object3D[] = [];
@@ -200,7 +215,14 @@ function kit(px: number, ground: Ground, mats: Mats): Kit {
     const m = new Mesh(geo, mat);
     m.position.set(x, y, z);
     group.add(m);
-    if (pickable) pick.push(m);
+    if (pickable) {
+      pick.push(m);
+      if (inked) {
+        const e = new EdgesGeometry(geo, 25);
+        geoms.push(e);
+        m.add(new LineSegments(e, mats.ink));
+      }
+    }
     return m;
   };
   return {
@@ -304,6 +326,12 @@ interface Landmark {
   detail(): string;
   /** the view a click flies to */
   postcard: { center: [number, number]; zoom: number; pitch: number; bearing: number };
+  /**
+   * PROTOTYPE (?landmark=big): how it grows when the map is zoomed out. 'all' grows every way about its foot, 'up'
+   * only upwards (its plan is tied to the ground it stands on), 'across' upwards and across its axis but not along it
+   * (the bridge, whose length is the strait's); `most` caps the growth, and `shadow` is the height that casts one
+   */
+  grow: { how: 'all' | 'up' | 'across'; most: number; shadow?: number; sea?: boolean };
   build(k: Kit): void;
 }
 
@@ -323,6 +351,7 @@ const goldenGate: Landmark = {
   },
   // the classic view from Battery Spencer: over the north tower, down the bridge towards the city
   postcard: { center: BRIDGE.at(470, 0), zoom: 14, pitch: 60, bearing: 150 },
+  grow: { how: 'up', most: 3, sea: true },
   build(k) {
     const { w, ground, mats, add, column, tube } = k;
     const deckUnder = GG.roadway - GG.truss;
@@ -427,6 +456,7 @@ const sutroTower: Landmark = {
     return `${elev(977, u)} ${elevUnit(u)} tall · the city's television mast since 1973`;
   },
   postcard: { center: SUTRO.at(-20, -100), zoom: 15.5, pitch: 60, bearing: -100 },
+  grow: { how: 'all', most: 8, shadow: 298 },
   build(k) {
     const { w, ground, mats, bar } = k;
     const base = ground(0, 0, 25);
@@ -464,6 +494,7 @@ const alcatraz: Landmark = {
     return `the prison island, 1934 to 1963 · lighthouse ${elev(84, u)} ${elevUnit(u)}`;
   },
   postcard: { center: ALCATRAZ.at(0, 0), zoom: 15.5, pitch: 60, bearing: -45 },
+  grow: { how: 'up', most: 4 },
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
     // footprints from OpenStreetMap, as centre, size and turn in the island's frame; the prison stands 9° off its axis
@@ -530,6 +561,7 @@ const palaceOfFineArts: Landmark = {
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
   postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -100 },
+  grow: { how: 'all', most: 3 },
   build(k) {
     const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
     // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
@@ -633,6 +665,7 @@ const transamerica: Landmark = {
     return `${elev(853, u)} ${elevUnit(u)} · the city's tallest from 1972 to 2018`;
   },
   postcard: { center: PYRAMID.at(60, 0), zoom: 15.5, pitch: 60, bearing: 170 },
+  grow: { how: 'all', most: 8, shadow: 260 },
   build(k) {
     const { w, ground, mats, add, bar, column, loft, taperedBox } = k;
     const g = ground(0, 0, 20);
@@ -674,6 +707,7 @@ const salesforceTower: Landmark = {
     return `${elev(1070, u)} ${elevUnit(u)} · the city's tallest since 2018`;
   },
   postcard: { center: SALESFORCE.at(0, 0), zoom: 15.5, pitch: 60, bearing: -120 },
+  grow: { how: 'all', most: 8, shadow: 326 },
   build(k) {
     const { ground, mats, loft, sheet } = k;
     const g = ground(0, 0, 20);
@@ -699,6 +733,7 @@ const LANDMARKS: Landmark[] = [goldenGate, sutroTower, alcatraz, palaceOfFineArt
 
 interface Built {
   scene: Scene;
+  group: Group;
   pick: Object3D[];
   geoms: BufferGeometry[];
   mvp: Matrix4;
@@ -713,7 +748,13 @@ function lights(scene: Scene) {
   scene.add(sun, new HemisphereLight('#fff9ef', '#b8a98c', 1.5));
 }
 
-export function threeLandmarks(map: MlMap): CustomLayerInterface {
+/** PROTOTYPE (?landmark=big): something 250 m tall stays about this many pixels tall however far out the map is */
+const GROW_PX = 44;
+const GROW_M = 250;
+
+export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
+  const growth = (l: Landmark) => (big ? Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(map.getZoom())) / GROW_M)) : 1);
+  const scaleOf = (l: Landmark, s: number): [number, number, number] => (l.grow.how === 'all' ? [s, s, s] : l.grow.how === 'up' ? [1, s, 1] : [1, s, s]);
   const camera = new PerspectiveCamera();
   const ray = new Raycaster();
   let renderer: WebGLRenderer | null = null;
@@ -724,9 +765,12 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
   let zoomTimer = 0;
   let tip: maplibregl.Popup | null = null;
 
+  // a grown model is scaled about its datum (the ground under its origin, or the sea), so a footing is built where
+  // the scaling will carry it to the terrain that is really under it
   const groundFor =
-    (f: Frame): Ground =>
-    (x, z, spread = 0) => {
+    (f: Frame, [sx, sy, sz]: [number, number, number] = [1, 1, 1], datum = 0): Ground =>
+    (x0, z0, spread = 0) => {
+      const x = x0 * sx, z = z0 * sz;
       const samples = spread ? [[x, z], [x - spread, z], [x + spread, z], [x, z - spread], [x, z + spread]] : [[x, z]];
       let lowest = Infinity;
       for (const [sx, sz] of samples) {
@@ -734,7 +778,7 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
         const e = map.queryTerrainElevation({ lng, lat });
         if (e != null) lowest = Math.min(lowest, e);
       }
-      return lowest === Infinity ? 0 : lowest;
+      return lowest === Infinity ? 0 : (lowest - datum) / sy;
     };
   const floorOf = (l: Landmark): (number | null)[] =>
     [[0, 0], [100, 0], [-100, 0], [0, 100], [0, -100]].map(([x, z]) => {
@@ -753,14 +797,25 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
     if (!mats) return;
     const old = built.get(l);
     if (old) dispose(old);
-    const k = kit(metresPerPixel(map.getZoom()), groundFor(l.frame), mats);
+    const s = growth(l), scale = scaleOf(l, s);
+    const datum = l.grow.sea ? 0 : (map.queryTerrainElevation({ lng: l.frame.origin[0], lat: l.frame.origin[1] }) ?? 0);
+    const k = kit(metresPerPixel(map.getZoom()) / scale[0], groundFor(l.frame, scale, datum), mats, big);
     l.build(k);
+    if (big && l.grow.shadow) {
+      // the sun stands north-west, as the hillshade has it: the shadow lies to the south-east, as long as the thing is tall
+      const len = l.grow.shadow, m = k.add(new PlaneGeometry(len * 1.25, len * 0.3), mats.shadow2, 0, 1, 0);
+      m.rotation.set(-Math.PI / 2, 0, -Math.PI / 4 - l.frame.rotationY, 'YXZ');
+      m.position.set(len * 0.42, 1, 0).applyAxisAngle(Y, -Math.PI / 4 - l.frame.rotationY);
+      m.renderOrder = -1;
+    }
     k.group.rotation.y = l.frame.rotationY;
+    k.group.position.y = datum;
+    k.group.scale.set(...scale);
     const scene = new Scene();
     lights(scene);
     scene.add(k.group);
     scene.updateMatrixWorld(true);
-    built.set(l, { scene, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
+    built.set(l, { scene, group: k.group, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
   };
   const rebuild = () => {
     for (const l of LANDMARKS) buildOne(l);
@@ -858,6 +913,7 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
       for (const l of LANDMARKS) {
         const b = built.get(l);
         if (!b) continue;
+        if (big) b.group.scale.set(...scaleOf(l, growth(l)));
         const model = map.transform.getMatrixForModel(l.frame.origin, 0);
         b.mvp.copy(main).multiply(new Matrix4().fromArray(model as unknown as number[]));
         camera.projectionMatrix.copy(b.mvp);

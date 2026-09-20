@@ -15,7 +15,7 @@ import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
-/** which landmark layer draws: ?landmark=three (the default), extrude, or none */
+/** which landmark layer draws: ?landmark=three (the default), big (PROTOTYPE: grown when zoomed out, shadowed, inked), extrude, or none */
 const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
 const LANDMARK = LANDMARK_PARAM ?? 'three';
 
@@ -336,9 +336,9 @@ export class GuideMap {
       addExtrudedLandmarks(this.map);
       this.landmarkIds = [LANDMARK_LYR];
       this.showLandmarks(this.perspective);
-    } else if (LANDMARK === 'three') {
+    } else if (LANDMARK === 'three' || LANDMARK === 'big') {
       import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
-        this.map.addLayer(threeLandmarks(this.map));
+        this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big'));
         this.landmarkIds = [LANDMARK_3D];
         this.showLandmarks(this.perspective);
       });
