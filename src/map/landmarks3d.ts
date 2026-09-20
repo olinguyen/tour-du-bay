@@ -329,9 +329,11 @@ interface Landmark {
   /**
    * PROTOTYPE (?landmark=big): how it grows when the map is zoomed out. 'all' grows every way about its foot, 'up'
    * only upwards (its plan is tied to the ground it stands on), 'across' upwards and across its axis but not along it
-   * (the bridge, whose length is the strait's); `most` caps the growth, and `shadow` is the height that casts one
+   * (the bridge, whose length is the strait's); `most` caps the growth, `tall` is the height that is kept at GROW_PX pixels (250 m unless given), and `shadow` is
+   * the blob it lays to the south-east: its length, its width and how far out its middle lies, on the ground under
+   * the origin or on the sea
    */
-  grow: { how: 'all' | 'up' | 'across'; most: number; shadow?: number; sea?: boolean };
+  grow: { how: 'all' | 'up' | 'across'; most: number; tall?: number; shadow?: [number, number, number]; shadowOnSea?: boolean; sea?: boolean };
   build(k: Kit): void;
 }
 
@@ -456,7 +458,7 @@ const sutroTower: Landmark = {
     return `${elev(977, u)} ${elevUnit(u)} tall · the city's television mast since 1973`;
   },
   postcard: { center: SUTRO.at(-20, -100), zoom: 15.5, pitch: 60, bearing: -100 },
-  grow: { how: 'all', most: 8, shadow: 298 },
+  grow: { how: 'all', most: 8, shadow: [370, 90, 125] },
   build(k) {
     const { w, ground, mats, bar } = k;
     const base = ground(0, 0, 25);
@@ -494,7 +496,7 @@ const alcatraz: Landmark = {
     return `the prison island, 1934 to 1963 · lighthouse ${elev(84, u)} ${elevUnit(u)}`;
   },
   postcard: { center: ALCATRAZ.at(0, 0), zoom: 15.5, pitch: 60, bearing: -45 },
-  grow: { how: 'up', most: 4 },
+  grow: { how: 'up', most: 3.5, tall: 60, shadow: [520, 260, 90], shadowOnSea: true },
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
     // footprints from OpenStreetMap, as centre, size and turn in the island's frame; the prison stands 9° off its axis
@@ -561,7 +563,7 @@ const palaceOfFineArts: Landmark = {
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
   postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -100 },
-  grow: { how: 'all', most: 3 },
+  grow: { how: 'all', most: 5, tall: 90, shadow: [330, 300, 45] },
   build(k) {
     const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
     // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
@@ -665,7 +667,7 @@ const transamerica: Landmark = {
     return `${elev(853, u)} ${elevUnit(u)} · the city's tallest from 1972 to 2018`;
   },
   postcard: { center: PYRAMID.at(60, 0), zoom: 15.5, pitch: 60, bearing: 170 },
-  grow: { how: 'all', most: 8, shadow: 260 },
+  grow: { how: 'all', most: 8, shadow: [325, 78, 110] },
   build(k) {
     const { w, ground, mats, add, bar, column, loft, taperedBox } = k;
     const g = ground(0, 0, 20);
@@ -707,7 +709,7 @@ const salesforceTower: Landmark = {
     return `${elev(1070, u)} ${elevUnit(u)} · the city's tallest since 2018`;
   },
   postcard: { center: SALESFORCE.at(0, 0), zoom: 15.5, pitch: 60, bearing: -120 },
-  grow: { how: 'all', most: 8, shadow: 326 },
+  grow: { how: 'all', most: 8, shadow: [400, 98, 137] },
   build(k) {
     const { ground, mats, loft, sheet } = k;
     const g = ground(0, 0, 20);
@@ -753,7 +755,7 @@ const GROW_PX = 44;
 const GROW_M = 250;
 
 export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
-  const growth = (l: Landmark) => (big ? Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(map.getZoom())) / GROW_M)) : 1);
+  const growth = (l: Landmark) => (big ? Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(map.getZoom())) / (l.grow.tall ?? GROW_M))) : 1);
   const scaleOf = (l: Landmark, s: number): [number, number, number] => (l.grow.how === 'all' ? [s, s, s] : l.grow.how === 'up' ? [1, s, 1] : [1, s, s]);
   const camera = new PerspectiveCamera();
   const ray = new Raycaster();
@@ -803,9 +805,11 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     l.build(k);
     if (big && l.grow.shadow) {
       // the sun stands north-west, as the hillshade has it: the shadow lies to the south-east, as long as the thing is tall
-      const len = l.grow.shadow, m = k.add(new PlaneGeometry(len * 1.25, len * 0.3), mats.shadow2, 0, 1, 0);
+      const [len, wide, out] = l.grow.shadow;
+      const y = l.grow.shadowOnSea ? (1 - datum) / scale[1] : 1;
+      const m = k.add(new PlaneGeometry(len, wide), mats.shadow2, 0, y, 0);
       m.rotation.set(-Math.PI / 2, 0, -Math.PI / 4 - l.frame.rotationY, 'YXZ');
-      m.position.set(len * 0.42, 1, 0).applyAxisAngle(Y, -Math.PI / 4 - l.frame.rotationY);
+      m.position.set(out, y, 0).applyAxisAngle(Y, -Math.PI / 4 - l.frame.rotationY);
       m.renderOrder = -1;
     }
     k.group.rotation.y = l.frame.rotationY;
