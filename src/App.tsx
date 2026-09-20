@@ -332,6 +332,22 @@ export default function App() {
         <div id="map" ref={mapEl} />
         {/* a working compass: it turns with the map, and a click swings the map back to north */}
         <button className="compass" ref={compass} title="Reset north" aria-label="Reset north" onClick={() => gm?.resetNorth()}>N</button>
+        {/* the reader's own camera moves, stacked under the compass the way every maps app does it */}
+        <div className="navstack" role="group" aria-label="Zoom">
+          <button title="Zoom in" aria-label="Zoom in" onClick={() => gm?.zoomIn()}>+</button>
+          <button title="Zoom out" aria-label="Zoom out" onClick={() => gm?.zoomOut()}>−</button>
+          {/* four corner brackets, never a crosshair: that glyph means "my location" in every maps app, and this site
+              never asks where the reader is. Mid-preview the camera is following the rider; framing is what stopping does. */}
+          <button
+            title={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
+            aria-label={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
+            onClick={() => (flying ? toggleFly() : gm?.fit())}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" />
+            </svg>
+          </button>
+        </div>
         <div className="mapctl">
           <div className="seg" role="group" aria-label="Map view">
             <span className="cap" aria-hidden="true">view</span>
@@ -346,15 +362,6 @@ export default function App() {
                 {m.toUpperCase()}
               </button>
             ))}
-          </div>
-          <div className="seg" role="group" aria-label="Zoom">
-            <span className="cap" aria-hidden="true">zoom</span>
-            <button title="Zoom out" aria-label="Zoom out" onClick={() => gm?.zoomOut()}>−</button>
-            <button title="Zoom in" aria-label="Zoom in" onClick={() => gm?.zoomIn()}>+</button>
-            {/* mid-preview the camera is following the rider; framing the ride is what stopping does */}
-            <button title={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'} onClick={() => (flying ? toggleFly() : gm?.fit())}>
-              fit
-            </button>
           </div>
           <div className="seg" role="group" aria-label="Units">
             <span className="cap" aria-hidden="true">units</span>
