@@ -370,7 +370,7 @@ const sutroTower: Landmark = {
     const u = units.get();
     return `${elev(977, u)} ${elevUnit(u)} tall · the city's television mast since 1973`;
   },
-  postcard: { center: SUTRO.at(0, 0), zoom: 14, pitch: 60, bearing: -100 },
+  postcard: { center: SUTRO.at(-20, -100), zoom: 15.5, pitch: 60, bearing: -100 },
   build(k) {
     const { w, ground, mats, bar } = k;
     const base = ground(0, 0, 25);
@@ -407,13 +407,14 @@ const alcatraz: Landmark = {
     const u = units.get();
     return `the prison island, 1934 to 1963 · lighthouse ${elev(84, u)} ${elevUnit(u)}`;
   },
-  postcard: { center: ALCATRAZ.at(0, 0), zoom: 14, pitch: 60, bearing: -45 },
+  postcard: { center: ALCATRAZ.at(0, 0), zoom: 15.5, pitch: 60, bearing: -45 },
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
     // the cellhouse, three storeys with a raised centre
     const top = ground(-20, 10, 40);
     column(-20, 10, 150, 45, top, top + 17, mats.stone, true);
-    add(new BoxGeometry(150, 3, 22), mats.stone, -20, top + 18.5, 10);
+    // the ridge starts inside the block below it: two faces at the same height would flicker against each other
+    add(new BoxGeometry(150, 4, 22), mats.stone, -20, top + 18, 10);
     // the lighthouse, an octagonal concrete tower with its lantern
     const lh = ground(65, 25, 6);
     cylinder(65, 25, w(2.6, 0.8), w(3.4, 0.8), lh, lh + 23, mats.stone, 8, true);
@@ -453,7 +454,7 @@ const palaceOfFineArts: Landmark = {
     const u = units.get();
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
-  postcard: { center: PALACE.at(0, 70), zoom: 14, pitch: 60, bearing: -95 },
+  postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -95 },
   build(k) {
     const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
     // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
@@ -532,7 +533,8 @@ interface Built {
   pick: Object3D[];
   geoms: BufferGeometry[];
   mvp: Matrix4;
-  onTerrain: boolean;
+  /** the terrain the footings were built on: its height under the origin and 100 m out each way, null where none */
+  floor: (number | null)[];
 }
 
 function lights(scene: Scene) {
@@ -565,7 +567,13 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
       }
       return lowest === Infinity ? 0 : lowest;
     };
-  const terrainReady = (l: Landmark) => map.queryTerrainElevation({ lng: l.frame.origin[0], lat: l.frame.origin[1] }) != null;
+  const floorOf = (l: Landmark): (number | null)[] =>
+    [[0, 0], [100, 0], [-100, 0], [0, 100], [0, -100]].map(([x, z]) => {
+      const [lng, lat] = l.frame.at(x, z);
+      return map.queryTerrainElevation({ lng, lat });
+    });
+  /** the same ground, to within what a footing could show */
+  const sameFloor = (a: (number | null)[], b: (number | null)[]) => a.every((v, i) => (v == null || b[i] == null ? v === b[i] : Math.abs(v - b[i]!) < 0.25));
   const visible = () => map.getLayer(LANDMARK_3D) !== undefined && map.getLayoutProperty(LANDMARK_3D, 'visibility') !== 'none';
 
   const dispose = (b: Built) => {
@@ -583,7 +591,7 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
     lights(scene);
     scene.add(k.group);
     scene.updateMatrixWorld(true);
-    built.set(l, { scene, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), onTerrain: terrainReady(l) });
+    built.set(l, { scene, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
   };
   const rebuild = () => {
     for (const l of LANDMARKS) buildOne(l);
@@ -596,12 +604,15 @@ export function threeLandmarks(map: MlMap): CustomLayerInterface {
       if (Math.round(map.getZoom() * 4) !== band) rebuild();
     }, 150);
   };
-  // the terrain arrives after the style, and again after each switch to 3D: stand the footings on it once it has
+  // the terrain arrives after the style and after each switch to 3D, and it sharpens as its tiles come in: a model
+  // built during a flight stands on the coarse parent tiles, so when the ground under it has changed by the time the
+  // map is idle, it is built again on the ground that is actually there
   const onIdle = () => {
+    if (!visible()) return;
     let any = false;
     for (const l of LANDMARKS) {
       const b = built.get(l);
-      if (b && !b.onTerrain && terrainReady(l)) {
+      if (b && !sameFloor(b.floor, floorOf(l))) {
         buildOne(l);
         any = true;
       }

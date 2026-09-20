@@ -56,7 +56,7 @@ const dem = (attribution?: string) => ({
   tiles: [DEM],
   encoding: 'terrarium' as const,
   tileSize: 256,
-  // the DEM set stops at zoom 14 (the map is capped there too)
+  // the DEM is read to zoom 14; 2D is capped there, 3D zooms on to 16 over the same tiles, stretched
   maxzoom: 14,
   ...(attribution ? { attribution } : {}),
 });

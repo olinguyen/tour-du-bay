@@ -41,6 +41,11 @@ export type FitMode = 'frame' | 'north';
 const VIEW_KEY = 'tdb.perspective';
 /** The perspective the reader last chose. 2D is the default: the terrain mesh is a second set of tiles to fetch. */
 export const savedPerspective = (): Perspective => (storage.get(VIEW_KEY) === '3d' ? '3d' : '2d');
+/**
+ * How far in each perspective zooms. The relief comes from zoom 14 tiles, so 2D stops where it is sharp; 3D goes on
+ * to 16 for the landmarks, which only read up close, over the same tiles stretched (smooth, if soft, on a hillside).
+ */
+const MAX_ZOOM: Record<Perspective, number> = { '2d': 14, '3d': 16 };
 
 export interface GuideMapEvents {
   onHover(slug: string | null): void;
@@ -133,7 +138,7 @@ export class GuideMap {
       fitBoundsOptions: { padding: 20 },
       pitch: savedPerspective() === '3d' ? PITCH : 0,
       minZoom: 9,
-      maxZoom: 14,
+      maxZoom: MAX_ZOOM[savedPerspective()],
       maxPitch: 60,
       maxBounds: box(MAX_BOUNDS),
       attributionControl: false,
@@ -436,6 +441,8 @@ export class GuideMap {
     const changed = mode !== this.perspective;
     this.perspective = mode;
     this.allowTurning(mode === '3d');
+    // past 14 is 3D's alone: leaving it there pulls the camera back to the 2D cap
+    this.map.setMaxZoom(MAX_ZOOM[mode]);
     if (changed) this.events.onPerspective?.(mode);
     if (this.loaded) this.map.setTerrain(mode === '3d' ? { source: SRC.terrain, exaggeration: 1 } : null);
     if (this.loaded) this.showLandmarks(mode);
