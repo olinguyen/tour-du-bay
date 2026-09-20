@@ -116,22 +116,22 @@
     "mill-valley-panhandle": { "role": "connector", "reverseVia": "panhandle-mill-valley" },
     "panhandle-crissy": {
       "role": "connector",
-      "via": [[-122.453697, 37.772978], [-122.4593, 37.7904], [-122.4661, 37.7981], [-122.452, 37.8057]]
+      "via": [[-122.453697, 37.772978], [-122.4593, 37.7904], [-122.452, 37.8057]]
     },
     "crissy-panhandle": { "role": "connector", "reverseVia": "panhandle-crissy" },
     "walnut-creek-danville": {
       "role": "connector",
-      "via": [[-122.067344, 37.905796], [-122.0592, 37.8905], [-122.0417, 37.8593], [-122.0303, 37.8434], [-122.0003, 37.8209]]
+      "via": [[-122.067344, 37.905796], [-122.0552, 37.88491], [-122.03845, 37.85943], [-122.02751, 37.84385], [-122.0003, 37.8209]]
     },
     "danville-walnut-creek": { "role": "connector", "reverseVia": "walnut-creek-danville" },
     "menlo-park-woodside": {
       "role": "connector",
-      "via": [[-122.182236, 37.454357], [-122.1976, 37.4472], [-122.2215, 37.4394], [-122.2409, 37.4327], [-122.254385, 37.429608]]
+      "via": [[-122.182236, 37.454357], [-122.1976, 37.4472], [-122.22063, 37.4418], [-122.254385, 37.429608]]
     },
     "woodside-menlo-park": { "role": "connector", "reverseVia": "menlo-park-woodside" },
     "palo-alto-portola-valley": {
       "role": "connector",
-      "via": [[-122.164925, 37.443482], [-122.1723, 37.4326], [-122.1856, 37.4183], [-122.2003, 37.4009], [-122.2122, 37.3766]]
+      "via": [[-122.164925, 37.443482], [-122.17343, 37.43232], [-122.19102, 37.41994], [-122.2122, 37.3766]]
     },
     "portola-valley-palo-alto": { "role": "connector", "reverseVia": "palo-alto-portola-valley" }
   },

@@ -98,8 +98,9 @@ describe.each(trips)('%s', (_name, ride, published) => {
     expect(a.legs.map(l => [l.from, l.to])).toEqual(b.legs.map(l => [l.from, l.to]));
     expect(a.wp.map(w => w.name)).toEqual(b.wp.map(w => w.name));
     a.legs.forEach((l, i) => {
-      expect(Math.round(l.gain)).toBe(Math.round(b.legs[i].gain));
-      expect(Math.round(l.loss)).toBe(Math.round(b.legs[i].loss));
+      // as with the totals, a leg's figure sitting on a half foot can round either way
+      expect(Math.abs(l.gain - b.legs[i].gain)).toBeLessThan(0.5);
+      expect(Math.abs(l.loss - b.legs[i].loss)).toBeLessThan(0.5);
       expect(l.mi).toBeCloseTo(b.legs[i].mi, 4);
       // the times are calibrated to the ride's stated hours, so only their split can move, and only by seconds
       expect(Math.abs(l.t - b.legs[i].t) * 3600).toBeLessThan(2);
