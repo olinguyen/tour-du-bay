@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { RIDES, ridesIn } from '../data/guide';
+import { RIDES, rideIn, ridesIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
 import { areaSlug, hm, legs, pad2, place, roman } from '../lib/route';
@@ -37,6 +37,8 @@ export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onB
   const prev = seq[(si + seq.length - 1) % seq.length];
   const next = seq[(si + 1) % seq.length];
   const from = place(r.start);
+  /** the ride has a second start whose legs have been generated; without them the start line names one start */
+  const twoStarts = !!base.from && rideIn(base) !== null;
   const near = useMemo(() => {
     const same = ridesIn(base.area).filter(x => x !== base);
     return same.length ? same : RIDES.filter(x => x !== base).slice(0, 3);
@@ -105,7 +107,7 @@ export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onB
       <p className="tagline">{r.tagline}</p>
       <p className="startline">
         <span className="mono">Starts</span>
-        {base.from ? (
+        {twoStarts && base.from ? (
           // two ways to start, one choice for the whole guide: the figures, profile and map follow it
           <span className="starts" role="group" aria-label="Where to start">
             <button type="button" className={r.approach ? undefined : 'on'} aria-pressed={!r.approach} onClick={() => setRideIn(false)}>

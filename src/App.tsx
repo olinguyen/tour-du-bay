@@ -7,7 +7,7 @@ import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from
 import { savedPerspective, type Perspective } from './map/GuideMap';
 import { scrollBehavior } from './lib/html';
 import { dist, distUnit, elev, elevUnit, setUnits, useUnits, type Unit } from './lib/measure';
-import { useRideIn } from './lib/ridein';
+import { setRideIn, useRideIn } from './lib/ridein';
 import { place } from './lib/route';
 import { createStore, type Scrub } from './lib/store';
 
@@ -372,6 +372,21 @@ export default function App() {
                 onClick={() => gm?.setPerspective(m)}
               >
                 {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          {/* one choice for the whole guide: every ride with a station (or the Panhandle) to ride in from follows it */}
+          <div className="seg" role="group" aria-label="Where to start">
+            <span className="cap" aria-hidden="true">start</span>
+            {([[false, 'ride'], [true, 'transit']] as [boolean, string][]).map(([k, label]) => (
+              <button
+                key={label}
+                className={ridein === k ? 'on' : undefined}
+                aria-pressed={ridein === k}
+                title={k ? 'Ride in from the nearest station, or the Panhandle for the Marin rides' : 'Start where the ride does'}
+                onClick={() => setRideIn(k)}
+              >
+                {label}
               </button>
             ))}
           </div>
