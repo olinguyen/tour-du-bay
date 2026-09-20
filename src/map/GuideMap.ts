@@ -3,13 +3,14 @@
 // (start dots, photo pins, the rider, place labels) stays an HTML marker, so the stylesheet still draws them.
 import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson';
 import maplibregl, { type LngLatBoundsLike, type Map as MlMap, type MapGeoJSONFeature, type Marker } from 'maplibre-gl';
-import { LABELS, RIDES, ridesIn } from '../data/guide';
+import { LABELS, RIDES, rideIn, ridesIn } from '../data/guide';
 import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, MapLabel, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion, storage } from '../lib/html';
 import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
+import { rideIn as ridingIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 
@@ -54,10 +55,16 @@ const line = (route: LatLng[]): Feature<LineString> => ({
 const collection = (features: Feature[]): FeatureCollection => ({ type: 'FeatureCollection', features });
 const box = ([[s, w], [n, e]]: [LatLng, LatLng]): LngLatBoundsLike => [[w, s], [e, n]];
 
-/** read at hover time, so a tooltip opened after the units changed shows the units now in force */
+/** what opening the ride would show: the trip in from its other start when the reader rides in and it has one */
+const tripFor = (r: Ride) => (ridingIn.get() && rideIn(r)) || r;
+
+/** read at hover time, so a tooltip opened after the units or the start changed shows the choice now in force */
 const tipHtml = (r: Ride) => {
   const u = units.get();
-  const figures = `${r.area} · ${dist(r.lengthMi, u)} ${distUnit(u)} · ${elev(r.feet, u)} ${elevUnit(u)}${r.transit ? ' · ' + r.transit : ''}`;
+  const t = tripFor(r);
+  // the station's name already says BART or Caltrain, so the trip in names its start in place of the tag
+  const start = t.approach ? ` · from ${t.transit ? '' : 'the '}${place(t.start)}` : t.transit ? ' · ' + t.transit : '';
+  const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${start}`;
   return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
 };
 
@@ -82,9 +89,12 @@ export class GuideMap {
   private readonly flyTimers = new Set<number>();
   private readonly tip: maplibregl.Popup;
   private readonly unwatchUnits: () => void;
+  private readonly unwatchRideIn: () => void;
   private pins: Marker[] = [];
   /** the station (or the Panhandle) the open ride is being ridden in from, when it is */
   private fromDot: Marker | null = null;
+  /** the same dot as a hint on the overview: where the hovered ride would be ridden in from. No line, only the spot */
+  private hintDot: Marker | null = null;
   private ride: Ride | null = null;
   private area: Area | null = null;
   private hot: string | null = null;
@@ -133,6 +143,8 @@ export class GuideMap {
     map.addControl(scale, 'bottom-left');
     // the scale bar is the map's own readout of the reader's choice, so it follows the store rather than a prop
     this.unwatchUnits = units.subscribe(() => scale.setUnit(units.get()));
+    // the start switch sits on the overview too: a ride held hot by the list or the keyboard follows it at once
+    this.unwatchRideIn = ridingIn.subscribe(() => this.hint());
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
@@ -165,6 +177,7 @@ export class GuideMap {
 
   destroy() {
     this.unwatchUnits();
+    this.unwatchRideIn();
     this.clearTimers(this.timers);
     this.clearTimers(this.flyTimers);
     this.observer.disconnect();
@@ -301,6 +314,18 @@ export class GuideMap {
   setHot(slug: string | null) {
     this.hot = slug;
     if (!this.ride) this.paint();
+    this.hint();
+  }
+
+  /** on the overview, mark the station the hot ride would be ridden in from; an open ride draws its own */
+  private hint() {
+    this.hintDot?.remove();
+    this.hintDot = null;
+    const r = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
+    const t = r && tripFor(r);
+    if (!t?.approach) return;
+    const html = `<div class="from-dot hint${t.transit ? ' transit' : ''}" data-area="${esc(areaSlug(t.area))}"><em>${esc(place(t.start))}</em></div>`;
+    this.hintDot = marker(this.map, t.route[0], html);
   }
 
   setArea(area: Area | null) {
@@ -409,6 +434,7 @@ export class GuideMap {
     this.resetRide();
     this.ride = ride;
     this.tip.remove();
+    this.hint();
     this.paint();
 
     const colour = this.hotColour(ride);
@@ -449,6 +475,7 @@ export class GuideMap {
     this.resetRide();
     this.ride = null;
     this.paint();
+    this.hint();
     if (this.area) this.fly(bounds(ridesIn(this.area).map(r => r.route)), 1.1, 'area');
     else this.fly(HOME, 1.2, 'home');
   }
