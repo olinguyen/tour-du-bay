@@ -142,7 +142,11 @@ body.regions .pf-leg{stroke:var(--ac-hot)}
 /* map */
 #mapwrap{position:relative;min-width:0}
 #map{position:absolute;inset:0}
-.compass{position:absolute;top:24px;right:28px;z-index:500;pointer-events:none;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em}
+/* the compass is a button: it turns with the map (App writes the rotation on it) and clicking it swings the map back
+   north. Square to north it has nothing to do, so it only reads as clickable once the map has been turned. */
+.compass{all:unset;display:block;box-sizing:border-box;position:absolute;top:20px;right:22px;z-index:500;padding:4px 6px;color:var(--label);text-align:center;font:500 11px var(--sans);letter-spacing:.12em;transition:transform .15s linear;-webkit-tap-highlight-color:transparent}
+.compass.turned{cursor:pointer}
+.compass:focus-visible{outline:1px solid var(--route);outline-offset:2px;border-radius:50%}
 .compass::before{content:"";display:block;width:0;height:0;border:4.5px solid transparent;border-bottom:15px solid var(--label);border-top:0;margin:0 auto 5px}
 .compass::after{content:"";display:block;width:1px;height:18px;background:var(--label);margin:2px auto 0;opacity:.6}
 /* the reader's two standing choices, as a key card under the compass: how the map is drawn, and in what units.
@@ -227,7 +231,9 @@ h2.grp-hd{margin:0;font:inherit}
   .facts b{font-size:36px}
   #mapwrap,html.float #mapwrap{position:fixed;inset:0;z-index:1200;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .2s,visibility 0s .2s}
   body.map-open #mapwrap{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .2s}
-  .compass,.legend,html.float .ptab,html.float.phide .ptab{display:none}
+  /* the compass gives up its corner on a phone, and comes back (under the ride chip) once the map has been turned */
+  .compass:not(.turned),.legend,html.float .ptab,html.float.phide .ptab{display:none}
+  .compass{top:84px;right:16px;min-width:44px;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:0}
   html.float .legend,html.float .mapchip,html.float.phide .legend,html.float.phide .mapchip{left:16px}
   html.float .maplibregl-ctrl-bottom-left,html.float.phide .maplibregl-ctrl-bottom-left{left:0}
   .mapctl{top:auto;right:16px;bottom:calc(max(22px,env(safe-area-inset-bottom)) + 96px)}

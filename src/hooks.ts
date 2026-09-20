@@ -73,6 +73,7 @@ export function useGuideMap(el: RefObject<HTMLElement | null>, events: GuideMapE
         onPhotoHover: i => latest.current.onPhotoHover(i),
         onPhotoClick: i => latest.current.onPhotoClick(i),
         onPerspective: m => latest.current.onPerspective?.(m),
+        onBearing: b => latest.current.onBearing?.(b),
       },
       first.current ?? undefined,
     );
