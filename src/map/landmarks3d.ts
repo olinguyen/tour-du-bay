@@ -78,6 +78,14 @@ interface Mats {
   road: Material;
   lattice: Material;
   rope: Material;
+  /** storeys, one repeat of the texture each: the pyramid's quartz with its window bands, the tower's glass with its fins */
+  quartz: Material;
+  glass: Material;
+  aluminium: Material;
+  /** what is seen between the pyramid's legs */
+  shadow: Material;
+  /** the open screen that carries a glass tower's walls on past its roof */
+  crown: Material;
 }
 
 function materials(): Mats {
@@ -115,7 +123,19 @@ function materials(): Mats {
     c.fillStyle = '#c9b76a';
     c.fillRect(0, 31, 4, 2);
   });
+  const storey = (wall: string, band: string, from: number, to: number) =>
+    canvas(4, 16, c => {
+      c.fillStyle = wall;
+      c.fillRect(0, 0, 4, 16);
+      c.fillStyle = band;
+      c.fillRect(0, from, 4, to - from);
+    });
   return {
+    quartz: new MeshLambertMaterial({ map: storey('#f3f0e8', '#8d969a', 5, 11) }),
+    glass: new MeshLambertMaterial({ map: storey('#c6d6dd', '#f6f8f7', 0, 6) }),
+    aluminium: new MeshLambertMaterial({ color: '#cdd2d3' }),
+    shadow: new MeshLambertMaterial({ color: '#6f7375' }),
+    crown: new MeshLambertMaterial({ map: storey('#d3dfe3', '#f6f8f7', 0, 5), transparent: true, opacity: 0.85, side: DoubleSide }),
     steel: new MeshLambertMaterial({ color: BRIDGE_COLOR }),
     dark: new MeshLambertMaterial({ color: '#8a2a1c' }),
     white: new MeshLambertMaterial({ color: '#f4efe4' }),
@@ -162,6 +182,11 @@ interface Kit {
    * (angles in the x-z plane, x = cos): a curved wall, a lintel, a ring
    */
   sweep(profile: [number, number][], c: Vector3, r: number, a0: number, a1: number, segments: number, y0: number, mat: Material, pickable?: boolean): Mesh;
+  /**
+   * a skin over rings of [x, z] points at rising heights, every ring with the same number of points, flat-shaded;
+   * the texture repeats once per `storey` metres of height
+   */
+  loft(sections: { y: number; ring: [number, number][] }[], storey: number, mat: Material, pickable?: boolean): Mesh;
   /** a flat polygon at height y, with holes and with an outline in a second material when given */
   sheet(outline: [number, number][], y: number, mat: Material, edge?: Material, holes?: [number, number][][]): Mesh;
 }
@@ -219,6 +244,27 @@ function kit(px: number, ground: Ground, mats: Mats): Kit {
       const g = new BufferGeometry();
       g.setAttribute('position', new Float32BufferAttribute(pos, 3));
       g.setIndex(idx);
+      g.computeVertexNormals();
+      return add(g, mat, 0, 0, 0, pickable);
+    },
+    loft(sections, storey, mat, pickable) {
+      const pos: number[] = [];
+      const uv: number[] = [];
+      const n = sections[0].ring.length;
+      for (let i = 0; i < sections.length - 1; i++) {
+        const lo = sections[i], hi = sections[i + 1];
+        for (let j = 0; j < n; j++) {
+          const k = (j + 1) % n;
+          const corners: [{ y: number; ring: [number, number][] }, number, number][] = [[lo, j, j], [lo, k, j + 1], [hi, j, j], [hi, j, j], [lo, k, j + 1], [hi, k, j + 1]];
+          for (const [sec, at, u] of corners) {
+            pos.push(sec.ring[at][0], sec.y, sec.ring[at][1]);
+            uv.push(u / n, (sec.y - sections[0].y) / storey);
+          }
+        }
+      }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
       g.computeVertexNormals();
       return add(g, mat, 0, 0, 0, pickable);
     },
@@ -568,7 +614,86 @@ const palaceOfFineArts: Landmark = {
   },
 };
 
-const LANDMARKS: Landmark[] = [goldenGate, sutroTower, alcatraz, palaceOfFineArts];
+/** a square ring, half-width a, with its faces across the frame's axes */
+const square = (a: number): [number, number][] => [[a, a], [a, -a], [-a, -a], [-a, a]];
+
+/**
+ * The Transamerica Pyramid: 853 ft, a square 45 m at the street that would come to a point at the tip. The frame is
+ * its footprint in OpenStreetMap, which stands with the Financial District's streets, 9° off north. Off photographs:
+ * the storey of crossed legs at the foot, 48 storeys of window bands, the two wings (the lift shaft on the east face,
+ * the stair on the west) that stand clear of the faces from about the 29th floor as the faces lean away from them,
+ * and the aluminium spire over the top 212 ft.
+ */
+const PYRAMID = frame(37.795167, -122.402785, -9);
+const transamerica: Landmark = {
+  name: 'Transamerica Pyramid',
+  frame: PYRAMID,
+  detail: () => {
+    const u = units.get();
+    return `${elev(853, u)} ${elevUnit(u)} · the city's tallest from 1972 to 2018`;
+  },
+  postcard: { center: PYRAMID.at(60, 0), zoom: 15.5, pitch: 60, bearing: 170 },
+  build(k) {
+    const { w, ground, mats, add, bar, column, loft, taperedBox } = k;
+    const g = ground(0, 0, 20);
+    const H = 260, FOOT = 14, SPIRE = 195, A = 22.5;
+    const half = (h: number) => A * (1 - h / H);
+    // the legs: on each face a row of Vs from the street up to the first floor's edge, around a dark core
+    column(0, 0, 2 * half(0) - 8, 2 * half(0) - 8, g, g + FOOT, mats.shadow, true);
+    const t = w(1.6, 0.7);
+    for (let f = 0; f < 4; f++) {
+      const c = Math.cos((f * Math.PI) / 2), sn = Math.sin((f * Math.PI) / 2);
+      const at = (along: number, h: number) => new Vector3(half(h) * c - along * sn, g + h, half(h) * sn + along * c);
+      for (let i = 0; i < 5; i++) {
+        const foot = (-0.8 + 0.4 * i) * half(0), span = 0.2 * half(FOOT);
+        bar(at(foot, 0), at(foot - span, FOOT), t, mats.white);
+        bar(at(foot, 0), at(foot + span, FOOT), t, mats.white);
+      }
+    }
+    loft([{ y: g + FOOT, ring: square(half(FOOT)) }, { y: g + SPIRE, ring: square(half(SPIRE)) }], (SPIRE - FOOT) / 48, mats.quartz, true);
+    loft([{ y: g + SPIRE, ring: square(half(SPIRE)) }, { y: g + H, ring: square(w(0.4, 0.5)) }], H, mats.aluminium, true);
+    // the wings, plain concrete: they lean in a little themselves, and end flat where the spire begins
+    for (const side of [-1, 1]) {
+      add(taperedBox(7, SPIRE + 2 - 95, 10, 0.8), mats.concrete, 0, g + (95 + SPIRE + 2) / 2, side * 9, true);
+    }
+  },
+};
+
+/**
+ * Salesforce Tower: 1,070 ft, a square with rounded corners, 46 m across at the street and turned with the streets
+ * south of Market (its corners point north, east, south and west; the outline is OpenStreetMap's). Off photographs:
+ * the walls rise straight for the lower third and then curve in to about two thirds of the width, a white fin at
+ * every floor, and the last 150 ft are an open screen round the roof rather than floors.
+ */
+const SALESFORCE = frame(37.789776, -122.396935, 45);
+const salesforceTower: Landmark = {
+  name: 'Salesforce Tower',
+  frame: SALESFORCE,
+  detail: () => {
+    const u = units.get();
+    return `${elev(1070, u)} ${elevUnit(u)} · the city's tallest since 2018`;
+  },
+  postcard: { center: SALESFORCE.at(0, 0), zoom: 15.5, pitch: 60, bearing: -120 },
+  build(k) {
+    const { ground, mats, loft, sheet } = k;
+    const g = ground(0, 0, 20);
+    const H = 326, ROOF = 280, STRAIGHT = 110, A = 23;
+    // a squircle: |x|^4 + |z|^4 = a^4
+    const ring = (a: number): [number, number][] =>
+      Array.from({ length: 32 }, (_, i) => {
+        const th = -(i / 32) * 2 * Math.PI, c = Math.cos(th), sn = Math.sin(th);
+        const r = a / (c ** 4 + sn ** 4) ** 0.25;
+        return [r * c, r * sn];
+      });
+    const half = (h: number) => A * (h < STRAIGHT ? 1 : 1 - 0.38 * ((h - STRAIGHT) / (H - STRAIGHT)) ** 2);
+    const levels = (from: number, to: number, steps: number) => Array.from({ length: steps + 1 }, (_, i) => from + ((to - from) * i) / steps).map(h => ({ y: g + h, ring: ring(half(h)) }));
+    loft([...levels(0, STRAIGHT, 1), ...levels(STRAIGHT, ROOF, 8).slice(1)], ROOF / 61, mats.glass, true);
+    loft(levels(ROOF, H, 3), ROOF / 61, mats.crown, true);
+    sheet(ring(half(ROOF)), g + ROOF, mats.glass);
+  },
+};
+
+const LANDMARKS: Landmark[] = [goldenGate, sutroTower, alcatraz, palaceOfFineArts, transamerica, salesforceTower];
 
 // ---- the layer
 
