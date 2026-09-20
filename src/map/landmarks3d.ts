@@ -91,6 +91,8 @@ interface Mats {
   /** PROTOTYPE (?landmark=big): a soft shadow laid on the ground, and an inked edge on the main masses */
   shadow2: Material;
   ink: Material;
+  /** the map's own ground colour, for an island that grows with what stands on it */
+  land: Material;
 }
 
 function materials(): Mats {
@@ -145,6 +147,8 @@ function materials(): Mats {
   });
   return {
     shadow2: new MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
+    // darker than the paper it matches: the sun and the sky together light it past white otherwise
+    land: new MeshLambertMaterial({ color: '#cfc5ae', side: DoubleSide }),
     ink: new LineBasicMaterial({ color: css('--ink', '#2a241c'), transparent: true, opacity: 0.3 }),
     quartz: new MeshLambertMaterial({ map: storey('#f3f0e8', '#8d969a', 5, 11) }),
     glass: new MeshLambertMaterial({ map: storey('#c6d6dd', '#f6f8f7', 0, 6) }),
@@ -183,6 +187,10 @@ interface Kit {
   pick: Object3D[];
   /** every geometry made, so it can be disposed on a rebuild */
   geoms: BufferGeometry[];
+  /** PROTOTYPE (?landmark=big): whether landmarks grow, and what is drawn only while one is grown or only at its true size */
+  grows: boolean;
+  whenGrown: Object3D[];
+  whenTrue: Object3D[];
   add(geo: BufferGeometry, mat: Material | Material[], x: number, y: number, z: number, pickable?: boolean): Mesh;
   /** a box from y0 up to y1, centred on x, z */
   column(x: number, z: number, lx: number, lz: number, y0: number, y1: number, mat: Material, pickable?: boolean): Mesh;
@@ -233,6 +241,9 @@ function kit(px: number, ground: Ground, mats: Mats, inked = false): Kit {
     group,
     pick,
     geoms,
+    grows: inked,
+    whenGrown: [],
+    whenTrue: [],
     add,
     column: (x, z, lx, lz, y0, y1, mat, pickable) => add(new BoxGeometry(lx, y1 - y0, lz), mat, x, (y0 + y1) / 2, z, pickable),
     cylinder: (x, z, rTop, rBottom, y0, y1, mat, segments = 12, pickable) => add(new CylinderGeometry(rTop, rBottom, y1 - y0, segments), mat, x, (y0 + y1) / 2, z, pickable),
@@ -305,14 +316,15 @@ function kit(px: number, ground: Ground, mats: Mats, inked = false): Kit {
       g.setAttribute('position', new Float32BufferAttribute(pos, 3));
       g.setIndex(idx);
       g.computeVertexNormals();
+      const m = add(g, mat, 0, 0, 0);
       if (edge)
         for (const ring of rings) {
           const e = new BufferGeometry();
           e.setAttribute('position', new Float32BufferAttribute(ring.flatMap(([x, z]) => [x, y, z]), 3));
           geoms.push(e);
-          group.add(new LineLoop(e, edge));
+          m.add(new LineLoop(e, edge));
         }
-      return add(g, mat, 0, 0, 0);
+      return m;
     },
   };
 }
@@ -329,11 +341,12 @@ interface Landmark {
   /**
    * PROTOTYPE (?landmark=big): how it grows when the map is zoomed out. 'all' grows every way about its foot, 'up'
    * only upwards (its plan is tied to the ground it stands on), 'across' upwards and across its axis but not along it
-   * (the bridge, whose length is the strait's); `most` caps the growth, `tall` is the height that is kept at GROW_PX pixels (250 m unless given), and `shadow` is
+   * (the bridge, whose length is the strait's), 'island' every way about sea level together with its own copy of the
+   * ground it stands on; `most` caps the growth, `tall` is the height that is kept at GROW_PX pixels (250 m unless given), and `shadow` is
    * the blob it lays to the south-east: its length, its width and how far out its middle lies, on the ground under
    * the origin or on the sea
    */
-  grow: { how: 'all' | 'up' | 'across'; most: number; tall?: number; shadow?: [number, number, number]; shadowOnSea?: boolean; sea?: boolean };
+  grow: { how: 'all' | 'up' | 'across' | 'island'; most: number; tall?: number; shadow?: [number, number, number]; shadowOnSea?: boolean; sea?: boolean };
   build(k: Kit): void;
 }
 
@@ -496,9 +509,31 @@ const alcatraz: Landmark = {
     return `the prison island, 1934 to 1963 · lighthouse ${elev(84, u)} ${elevUnit(u)}`;
   },
   postcard: { center: ALCATRAZ.at(0, 0), zoom: 15.5, pitch: 60, bearing: -45 },
-  grow: { how: 'up', most: 3.5, tall: 60, shadow: [520, 260, 90], shadowOnSea: true },
+  grow: { how: 'island', most: 3, tall: 60, shadow: [520, 260, 90], shadowOnSea: true, sea: true },
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
+    if (k.grows) {
+      // the island itself, read off the terrain on a 10 m grid, so that it grows with its buildings; at true size
+      // the terrain's own island is the one that shows
+      const X0 = -330, Z0 = -150, NX = 62, NZ = 31, STEP = 10;
+      const pos: number[] = [], idx: number[] = [], high: boolean[] = [];
+      for (let j = 0; j < NZ; j++)
+        for (let i = 0; i < NX; i++) {
+          const y = ground(X0 + i * STEP, Z0 + j * STEP);
+          pos.push(X0 + i * STEP, Math.max(y, 0), Z0 + j * STEP);
+          high.push(y > 0.5);
+        }
+      for (let j = 0; j < NZ - 1; j++)
+        for (let i = 0; i < NX - 1; i++) {
+          const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1;
+          if (high[a] || high[b] || high[c] || high[d]) idx.push(a, c, b, b, c, d);
+        }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      k.whenGrown.push(add(g, mats.land, 0, 0, 0));
+    }
     // footprints from OpenStreetMap, as centre, size and turn in the island's frame; the prison stands 9° off its axis
     const block = (x: number, z: number, lx: number, lz: number, turn: number, h: number, pickable = false) => {
       const y = ground(x, z, Math.min(lx, lz) / 2);
@@ -563,7 +598,7 @@ const palaceOfFineArts: Landmark = {
     return `1915 exposition · rotunda ${elev(162, u)} ${elevUnit(u)}`;
   },
   postcard: { center: PALACE.at(0, 40), zoom: 16, pitch: 60, bearing: -100 },
-  grow: { how: 'all', most: 5, tall: 90, shadow: [330, 300, 45] },
+  grow: { how: 'all', most: 6, tall: 90, shadow: [150, 130, 25] },
   build(k) {
     const { w, ground, mats, add, column, cylinder, sweep, sheet } = k;
     // filled, flat land: one floor for the whole site, the highest of a few samples so nothing sinks into the mesh
@@ -639,12 +674,17 @@ const palaceOfFineArts: Landmark = {
     // the exhibition hall behind the colonnade: 135 ft wide, 45 ft to the crown of its arched roof
     const HALL = 116;
     const ha0 = onArc(-60, HALL).a, ha1 = onArc(60, HALL).a;
-    sweep([[0, 0], [0, 9], [41, 9], [41, 0], [0, 0]], ARC, HALL, ha0, ha1, 24, g, mats.stone, true);
-    sweep([[0, 9], [3, 11.2], [9, 12.8], [20.5, 13.7], [32, 12.8], [38, 11.2], [41, 9]], ARC, HALL, ha0, ha1, 24, g, mats.roof, true);
-    for (const a of [ha0, ha1]) column(ARC.x + (HALL + 20.5) * Math.cos(a), ARC.z + (HALL + 20.5) * Math.sin(a), 41, 1.2, g, g + 13.2, mats.stone).rotation.y = -a;
+    // grown, the Palace is its rotunda and colonnade: the hall and the lagoon are its setting, and show at true size
+    k.whenTrue.push(sweep([[0, 0], [0, 9], [41, 9], [41, 0], [0, 0]], ARC, HALL, ha0, ha1, 24, g, mats.stone, true));
+    k.whenTrue.push(sweep([[0, 9], [3, 11.2], [9, 12.8], [20.5, 13.7], [32, 12.8], [38, 11.2], [41, 9]], ARC, HALL, ha0, ha1, 24, g, mats.roof, true));
+    for (const a of [ha0, ha1]) {
+      const wall = column(ARC.x + (HALL + 20.5) * Math.cos(a), ARC.z + (HALL + 20.5) * Math.sin(a), 41, 1.2, g, g + 13.2, mats.stone);
+      wall.rotation.y = -a;
+      k.whenTrue.push(wall);
+    }
 
     // the lagoon and its island
-    sheet(LAGOON, g + 1, mats.water, mats.shore, [LAGOON_ISLAND]);
+    k.whenTrue.push(sheet(LAGOON, g + 1, mats.water, mats.shore, [LAGOON_ISLAND]));
   },
 };
 
@@ -736,6 +776,8 @@ const LANDMARKS: Landmark[] = [goldenGate, sutroTower, alcatraz, palaceOfFineArt
 interface Built {
   scene: Scene;
   group: Group;
+  whenGrown: Object3D[];
+  whenTrue: Object3D[];
   pick: Object3D[];
   geoms: BufferGeometry[];
   mvp: Matrix4;
@@ -756,7 +798,7 @@ const GROW_M = 250;
 
 export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
   const growth = (l: Landmark) => (big ? Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(map.getZoom())) / (l.grow.tall ?? GROW_M))) : 1);
-  const scaleOf = (l: Landmark, s: number): [number, number, number] => (l.grow.how === 'all' ? [s, s, s] : l.grow.how === 'up' ? [1, s, 1] : [1, s, s]);
+  const scaleOf = (l: Landmark, s: number): [number, number, number] => (l.grow.how === 'all' || l.grow.how === 'island' ? [s, s, s] : l.grow.how === 'up' ? [1, s, 1] : [1, s, s]);
   const camera = new PerspectiveCamera();
   const ray = new Raycaster();
   let renderer: WebGLRenderer | null = null;
@@ -801,7 +843,8 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     if (old) dispose(old);
     const s = growth(l), scale = scaleOf(l, s);
     const datum = l.grow.sea ? 0 : (map.queryTerrainElevation({ lng: l.frame.origin[0], lat: l.frame.origin[1] }) ?? 0);
-    const k = kit(metresPerPixel(map.getZoom()) / scale[0], groundFor(l.frame, scale, datum), mats, big);
+    // an island carries its own ground, so its footings stand where they really do and the whole of it is scaled
+    const k = kit(metresPerPixel(map.getZoom()) / scale[0], l.grow.how === 'island' ? groundFor(l.frame) : groundFor(l.frame, scale, datum), mats, big);
     l.build(k);
     if (big && l.grow.shadow) {
       // the sun stands north-west, as the hillshade has it: the shadow lies to the south-east, as long as the thing is tall
@@ -819,7 +862,7 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     lights(scene);
     scene.add(k.group);
     scene.updateMatrixWorld(true);
-    built.set(l, { scene, group: k.group, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
+    built.set(l, { scene, group: k.group, whenGrown: k.whenGrown, whenTrue: k.whenTrue, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
   };
   const rebuild = () => {
     for (const l of LANDMARKS) buildOne(l);
@@ -859,7 +902,7 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
       const inv = b.mvp.clone().invert();
       const near = new Vector3(nx, ny, -1).applyMatrix4(inv), far = new Vector3(nx, ny, 1).applyMatrix4(inv);
       ray.set(near, far.sub(near).normalize());
-      if (ray.intersectObjects(b.pick, false).length) return l;
+      if (ray.intersectObjects(b.pick.filter(o => o.visible), false).length) return l;
     }
     return null;
   };
@@ -917,7 +960,12 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
       for (const l of LANDMARKS) {
         const b = built.get(l);
         if (!b) continue;
-        if (big) b.group.scale.set(...scaleOf(l, growth(l)));
+        if (big) {
+          const s = growth(l);
+          b.group.scale.set(...scaleOf(l, s));
+          for (const o of b.whenGrown) o.visible = s > 1.02;
+          for (const o of b.whenTrue) o.visible = s < 1.3;
+        }
         const model = map.transform.getMatrixForModel(l.frame.origin, 0);
         b.mvp.copy(main).multiply(new Matrix4().fromArray(model as unknown as number[]));
         camera.projectionMatrix.copy(b.mvp);
