@@ -23,6 +23,8 @@ const FOLLOW_MS = 50;
 const PANEL_GAP_PX = 24;
 /** map px the floating toggle button covers along the bottom edge on a phone */
 const TOGGLE_PX = 80;
+/** map px a ride's name needs when it is lettered to the left of its start dot */
+const LEFT_LABEL_PX = 110;
 /** the pitch 3D tilts to, and how long the tilt takes */
 const PITCH = 42, TILT_MS = 900;
 /** how long the compass takes to swing back north, and a zoom button's step */
@@ -257,7 +259,7 @@ export class GuideMap {
     const r = RIDES.find(x => x.slug === slug);
     if (!r) return;
     this.map.getCanvas().style.cursor = 'pointer';
-    this.tip.setLngLat(at).setHTML(tipHtml(r)).addTo(this.map);
+    this.showTip(at, r);
     this.events.onHover(slug);
   }
 
@@ -269,7 +271,7 @@ export class GuideMap {
       el.addEventListener('mouseenter', () => {
         if (this.ride) return;
         this.events.onHover(r.slug);
-        this.tip.setLngLat(ll(r.route[0])).setHTML(tipHtml(r)).addTo(this.map);
+        this.showTip(ll(r.route[0]), r);
       });
       el.addEventListener('mouseleave', () => {
         if (this.ride) return;
@@ -648,15 +650,30 @@ export class GuideMap {
       if (kind === 'ride') return { top: 90, left: 24, right: 24, bottom: TOGGLE_PX + 16 };
       return { top: 40, left: 24, right: 24, bottom: TOGGLE_PX };
     }
+    const f = this.panelPx();
+    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 20 };
+    if (kind === 'ride') return { top: 90, left: 70 + f, right: 70, bottom: 110 };
+    // a region shows its rides' names; one lettered to the left of its dot (labelSide 'l') needs the room to be read
+    // beside the panel rather than under it
+    const lettered = this.area && ridesIn(this.area).some(r => r.labelSide === 'l') ? LEFT_LABEL_PX : 0;
+    return { top: 70, left: 70 + f + lettered, right: 70, bottom: 70 };
+  }
+
+  /** map px the floating panel covers along the left edge, gap included; 0 when it is hidden or does not float */
+  private panelPx() {
+    if (this.mobile) return 0;
     // the floating panel's actual width (0 in a layout where it doesn't cover the map)
     const side = document.getElementById('side');
     const panel = document.documentElement.classList.contains('float') && side ? side.offsetWidth : 0;
     const px = panel ? panel + PANEL_GAP_PX : 0;
     // on a narrow window the panel covers most of the map; padding for it would leave no room to fit anything
-    const f = this.covered && !this.previewing && px < this.map.getContainer().clientWidth * 0.6 ? px : 0;
-    if (kind === 'home') return { top: 20, left: 20 + f, right: 20, bottom: 20 };
-    if (kind === 'ride') return { top: 90, left: 70 + f, right: 70, bottom: 110 };
-    return { top: 70, left: 70 + f, right: 70, bottom: 70 };
+    return this.covered && !this.previewing && px < this.map.getContainer().clientWidth * 0.6 ? px : 0;
+  }
+
+  /** the tooltip keeps inside the map by itself, but the panel floats over the map's left edge: keep clear of that too */
+  private showTip(at: maplibregl.LngLatLike, r: Ride) {
+    this.tip.setPadding({ left: this.panelPx() });
+    this.tip.setLngLat(at).setHTML(tipHtml(r)).addTo(this.map);
   }
 
   private refit(duration: number) {
