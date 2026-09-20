@@ -15,8 +15,8 @@ import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
-/** PROTOTYPE: which landmark rendering to show — ?landmark=extrude (default) | three | none */
-const LANDMARK = new URLSearchParams(location.search).get('landmark') ?? 'extrude';
+/** PROTOTYPE: which landmark rendering to show — ?landmark=three (default) | extrude | none */
+const LANDMARK = new URLSearchParams(location.search).get('landmark') ?? 'three';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 /** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
