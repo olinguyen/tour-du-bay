@@ -38,7 +38,8 @@ the two were not committed together. Because the script imports `src/lib/prepare
      Marin rides — as its own `startId` and `parts`. It must ride every part of the ride itself, since the page
      moves photos and waypoints onto it by the part they sit on; the legs around the ride are what it adds. The
      ride's entry in `src/data/rides.ts` then names that start in `from` (with `transit: 'BART'` or `'Caltrain'`
-     for a station), and the page offers the two starts as a switch.
+     for a station, and `via: 'Mill Valley'` when the way in meets the ride somewhere other than the ride's own
+     start, so the route card can name the place), and the page offers the two starts as a switch.
 3. Generate, with an internet connection:
 
    ```sh
@@ -51,7 +52,8 @@ the two were not committed together. Because the script imports `src/lib/prepare
    the plan (`fastbike`: paved roads, direct). Look at the result on the map before committing: `fastbike` will
    happily pick a highway over a quiet lane, so put a via point or two on the lane you mean, and put them on the
    road itself rather than on a trail beside it (the script warns when more than 100 m of a segment runs on
-   paths, footways or tracks). A shoreline point without terrain elevation takes its neighbour's.
+   paths, footways or tracks, and when a segment rides out to a via point and back the same way, which is what a
+   point placed a block off the route produces). A shoreline point without terrain elevation takes its neighbour's.
 4. Run `npm test`, `npm run test:routes` (offline regression checks of the script itself) and `npm run build`.
    `src/data/routes.test.ts` re-prepares `route-data.json` from scratch, part by part, and checks that what the
    guide draws — both SVG paths, the figures, the climbs, waypoints and legs — is unchanged by the encoding, for

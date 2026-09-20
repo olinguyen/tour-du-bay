@@ -6,7 +6,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { prepareRoutes, serializeModule } from './prepare-routes.mjs';
+import { doublesBack, prepareRoutes, serializeModule } from './prepare-routes.mjs';
 import { FT_PER_M } from '../src/lib/units.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -437,6 +437,20 @@ test('time spent on paths, footways or tracks is reported but not fatal', async 
     await f.run({ args: ['out'], log: { log() {}, warn: message => warnings.push(message) }, fetchRoute: async () => response(f.segments.out, { messages }) });
     assert.deepEqual(warnings, expected);
   }
+});
+
+test('a part that rides out to a via point and back the same way is reported but not fatal', async t => {
+  // 37.001 to a via 0.002 degrees of longitude (about 178 m) off the route, and back through the same vertices
+  const spur = [[37, -122, 33], [37.001, -122.001, 66], [37.001, -122.002, 66], [37.001, -122.003, 66], [37.001, -122.002, 66], [37.001, -122.001, 66], [37.002, -122.002, 98]];
+  assert.equal(doublesBack([[37, -122, 33], [37.001, -122.001, 66], [37.002, -122.002, 98]]), null);
+  // a loop closes on its start without retracing anything
+  assert.equal(doublesBack([[37, -122, 0], [37.002, -122, 0], [37.002, -122.002, 0], [37, -122.002, 0], [37, -122, 0]]), null);
+  assert.equal(Math.round(doublesBack(spur).meters), 356);
+
+  const f = await fixture(t);
+  const warnings = [];
+  await f.run({ args: ['out'], log: { log() {}, warn: message => warnings.push(message) }, fetchRoute: async () => response({ ...f.segments.out, coordinates: spur }) });
+  assert.deepEqual(warnings, ['out: rides 356 m out and back from 37.00100,-122.00100; check the via point there sits on the route']);
 });
 
 test('retained rides keep their preparation date; regenerated ones take the newest part', async t => {

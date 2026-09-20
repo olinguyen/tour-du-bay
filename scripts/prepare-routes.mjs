@@ -119,6 +119,9 @@ export async function prepareRoutes({
       const soft = (properties.messages || []).slice(1).filter(message => /(?:^|\s)highway=(?:path|footway|track|pedestrian)(?:\s|$)/.test(message[9] || ''));
       const softMeters = soft.reduce((sum, message) => sum + (Number(message[3]) || 0), 0);
       if (softMeters > 100) log.warn(`${id}: ${Math.round(softMeters)} m on paths, footways or tracks; check the via points sit on the road`);
+      // The router reaches a via point placed beside the road by riding out to it and back: nothing unsuitable, only wrong.
+      const spur = doublesBack(part.coordinates);
+      if (spur) log.warn(`${id}: rides ${Math.round(spur.meters)} m out and back from ${spur.at[0].toFixed(5)},${spur.at[1].toFixed(5)}; check the via point there sits on the route`);
       segments[id] = part;
       checkpoint.segments[id] = part;
       // Only this private checkpoint may be incomplete or have disconnected joins.
@@ -456,6 +459,28 @@ function validateRecord(slug, route, itinerary, plans, inputs, vias) {
   if (offset !== route.points.length) throw new Error(`${slug}: part counts do not cover the published points`);
   if (source.service !== 'BRouter' || source.profile !== inputs.profile) throw new Error(`${slug}: source differs from routing inputs`);
   if (distanceMeters(latLng(plans.starts[itinerary.startId].coordinate), route.points[0]) > START_M) throw new Error(`${slug}: route starts too far from its named start`);
+}
+
+/**
+ * The longest stretch of a part that leaves a spot, turns round and comes back to it along the same road, or null.
+ * Both ends of the stretch and the vertices next to them must coincide, so a loop that closes on itself, or a lap
+ * of a one-way car park, is not one.
+ */
+export function doublesBack(coordinates, minMeters = 150, maxMeters = 4000) {
+  const along = [0];
+  for (let i = 1; i < coordinates.length; i++) along.push(along[i - 1] + distanceMeters(coordinates[i - 1], coordinates[i]));
+  let worst = null;
+  for (let i = 0; i < coordinates.length; i++) {
+    for (let j = coordinates.length - 1; j > i + 3; j--) {
+      const meters = along[j] - along[i];
+      if (meters > maxMeters || meters < minMeters) continue;
+      if (distanceMeters(coordinates[i], coordinates[j]) > 12 || distanceMeters(coordinates[i + 1], coordinates[j - 1]) > 15) continue;
+      if (!worst || meters > worst.meters) worst = { meters, at: coordinates[i] };
+      i = j;
+      break;
+    }
+  }
+  return worst;
 }
 
 /** metres between two [lat, lng(, …)] points */
