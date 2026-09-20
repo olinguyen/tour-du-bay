@@ -191,6 +191,8 @@ body.ride .start-dot{transform:translate(-50%,-50%) scale(.45)}body.ride .start-
 .start-dot.dim{opacity:.35}
 .start-dot em{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:9px;white-space:nowrap;font:italic 400 15px/1 var(--display);letter-spacing:.005em;color:var(--label);text-shadow:0 0 3px var(--halo),0 0 6px var(--halo),0 0 10px var(--halo);opacity:0;transition:opacity .35s;pointer-events:none}
 body.names .start-dot em,.start-dot.hot em{opacity:1}
+/* the tooltip already names the ride under the pointer; with every name switched on, the label is not a hover effect and stays */
+body.tipped:not(.names) .start-dot.hot em{opacity:0}
 .start-dot em.l{left:auto;right:100%;margin-left:0;margin-right:9px}
 body.ride .start-dot em,body.names .start-dot.dim em,.start-dot.dim em{opacity:0}
 .legend i.cl{border-top-width:6px;border-color:var(--route-hot);opacity:.45}
