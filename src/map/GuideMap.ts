@@ -59,11 +59,8 @@ const box = ([[s, w], [n, e]]: [LatLng, LatLng]): LngLatBoundsLike => [[w, s], [
 const tipHtml = (r: Ride) => {
   const u = units.get();
   const t = tripFor(r, rideIn.get());
-  // riding in, every ride that can be reached names where from, the ones that begin at a station included; the
-  // station's name already says BART or Caltrain, so it stands in place of the tag
-  const named = rideIn.get() && (t.approach || t.transit);
-  const start = named ? ` · from ${t.transit ? '' : 'the '}${place(t.start)}` : t.transit ? ' · ' + t.transit : '';
-  const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${start}`;
+  // figures only: the map names the station itself while the ride is hot, so the tooltip does not say it again
+  const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${t.transit ? ' · ' + t.transit : ''}`;
   return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
 };
 
