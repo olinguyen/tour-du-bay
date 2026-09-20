@@ -93,10 +93,8 @@ export class GuideMap {
   private readonly unwatchUnits: () => void;
   private readonly unwatchRideIn: () => void;
   private pins: Marker[] = [];
-  /** the station (or the Panhandle) the open ride is being ridden in from, when it is */
+  /** the station (or the Panhandle) a ride is ridden in from: the open ride's, or on the overview the hovered ride's as a hint */
   private fromDot: Marker | null = null;
-  /** the same dot as a hint on the overview: where the hovered ride would be ridden in from. No line, only the spot */
-  private hintDot: Marker | null = null;
   private ride: Ride | null = null;
   private area: Area | null = null;
   private hot: string | null = null;
@@ -146,7 +144,7 @@ export class GuideMap {
     // the scale bar is the map's own readout of the reader's choice, so it follows the store rather than a prop
     this.unwatchUnits = units.subscribe(() => scale.setUnit(units.get()));
     // the start switch sits on the overview too: a ride held hot by the list or the keyboard follows it at once
-    this.unwatchRideIn = ridingIn.subscribe(() => this.hint());
+    this.unwatchRideIn = ridingIn.subscribe(() => this.station());
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
@@ -316,21 +314,25 @@ export class GuideMap {
   setHot(slug: string | null) {
     this.hot = slug;
     if (!this.ride) this.paint();
-    this.hint();
+    this.station();
   }
 
-  /** on the overview, mark the station the hot ride would be ridden in from; an open ride draws its own */
-  private hint() {
-    this.hintDot?.remove();
-    this.hintDot = null;
-    const r = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
-    const t = r && tripFor(r);
-    if (!t || !ridingIn.get() || !(t.approach || t.transit)) return;
-    // a ride that begins at its station has the dot already, ringed: only the name is added, across from the ride's
-    const at = t.approach ? `${t.transit ? ' transit' : ''}"` : ` bare"`;
+  /**
+   * Where the reader rides in from, for the open ride or else the hovered one: the station's dot and name for a trip
+   * in, the name alone for a ride that begins at its station (its numbered dot is the station, already ringed). The
+   * way in itself is drawn only for an open ride.
+   */
+  private station() {
+    this.fromDot?.remove();
+    this.fromDot = null;
+    const hot = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
+    const t = this.ride ?? (hot && tripFor(hot));
+    if (!t || !(t.approach || (ridingIn.get() && t.transit))) return;
+    const kind = `${this.ride ? '' : ' hint'}${t.approach ? (t.transit ? ' transit' : '') : ' bare'}`;
+    // across from the ride's own name, which a ride that begins at its station shows beside the same dot
     const side = t.approach || t.labelSide === 'l' ? '' : ' class="l"';
-    const html = `<div class="from-dot hint${at} data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(place(t.start))}</em></div>`;
-    this.hintDot = marker(this.map, t.route[0], html);
+    const html = `<div class="from-dot${kind}" data-area="${esc(areaSlug(t.area))}"><em${side}>${esc(place(t.start))}</em></div>`;
+    this.fromDot = marker(this.map, t.route[0], html);
   }
 
   setArea(area: Area | null) {
@@ -439,16 +441,11 @@ export class GuideMap {
     this.resetRide();
     this.ride = ride;
     this.tip.remove();
-    this.hint();
+    this.station();
     this.paint();
 
     const colour = this.hotColour(ride);
-    if (ride.approach) {
-      this.setData(SRC.approach, ride.approach.lines.map(l => ({ ...line(l), properties: { color: this.colour(ride) } })));
-      // the station is the trip's own start; the ride's numbered dot stays where the ride itself begins
-      const html = `<div class="from-dot${ride.transit ? ' transit' : ''}" data-area="${esc(areaSlug(ride.area))}"><em>${esc(place(ride.start))}</em></div>`;
-      this.fromDot = marker(this.map, ride.route[0], html);
-    }
+    if (ride.approach) this.setData(SRC.approach, ride.approach.lines.map(l => ({ ...line(l), properties: { color: this.colour(ride) } })));
     document.body.classList.toggle('ridein', !!ride.approach);
     this.setData(SRC.climbs, climbs(ride).map(({ a, b }) => ({ ...line(sliceBetween(ride.route, ride.cum, a, b)), properties: { color: colour } })));
     this.pins = ride.photos.map((ph, i) => {
@@ -480,7 +477,7 @@ export class GuideMap {
     this.resetRide();
     this.ride = null;
     this.paint();
-    this.hint();
+    this.station();
     if (this.area) this.fly(bounds(ridesIn(this.area).map(r => r.route)), 1.1, 'area');
     else this.fly(HOME, 1.2, 'home');
   }

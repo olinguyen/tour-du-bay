@@ -201,6 +201,7 @@ body.ride .start-dot em,body.names .start-dot.dim em,.start-dot.dim em{opacity:0
 .from-dot.hint{pointer-events:none;animation:hint-in .25s ease-out both}
 /* on a ride that starts at its station the numbered dot is the station: the hint is its name alone, sized to clear that dot and its ring */
 .from-dot.bare{width:24px;height:24px;background:none;border:0;box-shadow:none}
+body.ride .from-dot.bare{width:14px;height:14px}
 .from-dot em.l{left:auto;right:100%;margin-left:0;margin-right:11px}
 @keyframes hint-in{from{opacity:0}}
 body.ride .legend .l-list{display:none}body.ride .legend .l-ride{display:block}

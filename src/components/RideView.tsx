@@ -120,7 +120,7 @@ export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onB
             </button>
           </span>
         ) : (
-          <b>{r.start}</b>
+          <b>{r.start}{r.transit && <i className="tr">{r.transit}</i>}</b>
         )}
       </p>
       {r.approach && (
