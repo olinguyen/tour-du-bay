@@ -77,7 +77,7 @@ const ridingIn = new Map<string, Ride | null>();
  * falls, and the stated hours stretch with the estimated time. Composed on first use and kept, so the app can tell
  * one trip from another by identity. Null for a ride with a single start.
  */
-export function rideIn(r: Ride): Ride | null {
+export function tripIn(r: Ride): Ride | null {
   if (ridingIn.has(r.slug)) return ridingIn.get(r.slug)!;
   const it = ROUTES[r.slug];
   let out: Ride | null = null;
@@ -111,6 +111,9 @@ export function rideIn(r: Ride): Ride | null {
   ridingIn.set(r.slug, out);
   return out;
 }
+
+/** what the guide shows for a ride: the trip in from its other start when the reader rides in and it has one */
+export const tripFor = (r: Ride, ridingIn: boolean): Ride => (ridingIn && tripIn(r)) || r;
 
 /** where a fraction of a ride lands on the map: exposed for the tests that check a photo stays put when the trip changes */
 export const spotAt = (r: Ride, f: number) => pointAt(r.route, r.cum, f);

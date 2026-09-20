@@ -3,14 +3,14 @@
 // (start dots, photo pins, the rider, place labels) stays an HTML marker, so the stylesheet still draws them.
 import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson';
 import maplibregl, { type LngLatBoundsLike, type Map as MlMap, type MapGeoJSONFeature, type Marker } from 'maplibre-gl';
-import { LABELS, RIDES, rideIn, ridesIn } from '../data/guide';
+import { LABELS, RIDES, ridesIn, tripFor } from '../data/guide';
 import MAP_BOUNDS from '../data/map-bounds.json';
 import type { Area, LatLng, Leg, MapLabel, Ride } from '../data/types';
 import { bounds, pointAt, sliceBetween, sliceTo } from '../lib/geo';
 import { esc, reducedMotion, storage } from '../lib/html';
 import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
-import { rideIn as ridingIn } from '../lib/ridein';
+import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 
@@ -55,16 +55,13 @@ const line = (route: LatLng[]): Feature<LineString> => ({
 const collection = (features: Feature[]): FeatureCollection => ({ type: 'FeatureCollection', features });
 const box = ([[s, w], [n, e]]: [LatLng, LatLng]): LngLatBoundsLike => [[w, s], [e, n]];
 
-/** what opening the ride would show: the trip in from its other start when the reader rides in and it has one */
-const tripFor = (r: Ride) => (ridingIn.get() && rideIn(r)) || r;
-
 /** read at hover time, so a tooltip opened after the units or the start changed shows the choice now in force */
 const tipHtml = (r: Ride) => {
   const u = units.get();
-  const t = tripFor(r);
+  const t = tripFor(r, rideIn.get());
   // riding in, every ride that can be reached names where from, the ones that begin at a station included; the
   // station's name already says BART or Caltrain, so it stands in place of the tag
-  const named = ridingIn.get() && (t.approach || t.transit);
+  const named = rideIn.get() && (t.approach || t.transit);
   const start = named ? ` · from ${t.transit ? '' : 'the '}${place(t.start)}` : t.transit ? ' · ' + t.transit : '';
   const figures = `${t.area} · ${dist(t.lengthMi, u)} ${distUnit(u)} · ${elev(t.feet, u)} ${elevUnit(u)}${start}`;
   return `<span>${esc(r.name)}</span><small>${esc(figures)}</small>`;
@@ -144,7 +141,7 @@ export class GuideMap {
     // the scale bar is the map's own readout of the reader's choice, so it follows the store rather than a prop
     this.unwatchUnits = units.subscribe(() => scale.setUnit(units.get()));
     // the start switch sits on the overview too: a ride held hot by the list or the keyboard follows it at once
-    this.unwatchRideIn = ridingIn.subscribe(() => this.station());
+    this.unwatchRideIn = rideIn.subscribe(() => this.station());
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
@@ -326,8 +323,8 @@ export class GuideMap {
     this.fromDot?.remove();
     this.fromDot = null;
     const hot = this.ride ? undefined : RIDES.find(x => x.slug === this.hot);
-    const t = this.ride ?? (hot && tripFor(hot));
-    if (!t || !(t.approach || (ridingIn.get() && t.transit))) return;
+    const t = this.ride ?? (hot && tripFor(hot, rideIn.get()));
+    if (!t || !(t.approach || (rideIn.get() && t.transit))) return;
     const kind = `${this.ride ? '' : ' hint'}${t.approach ? (t.transit ? ' transit' : '') : ' bare'}`;
     // across from the ride's own name, which a ride that begins at its station shows beside the same dot
     const side = t.approach || t.labelSide === 'l' ? '' : ' class="l"';

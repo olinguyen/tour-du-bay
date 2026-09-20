@@ -9,7 +9,7 @@ import { annotations, outline, profileScale } from '../lib/profileChart';
 import { prepareRoute, type RoutePoint } from '../lib/prepare';
 import { climbs, elevationGain, legs, steepDescents } from '../lib/route';
 import { KM_PER_MI } from '../lib/units.mjs';
-import { RIDES, rideIn } from './guide';
+import { RIDES, tripIn } from './guide';
 import { composeRoute, type DecodedRoute } from './routeCodec';
 import type { Ride } from './types';
 
@@ -52,7 +52,7 @@ function fromPlan(ride: Ride, p: Published): Ride {
 }
 
 const trips = RIDES.flatMap(r => {
-  const t = rideIn(r);
+  const t = tripIn(r);
   return [[r.slug, r, plans[r.slug]] as const, ...(t ? [[`${r.slug} from ${t.start}`, t, plans[r.slug].transit!] as const] : [])];
 });
 
@@ -131,7 +131,7 @@ describe.each(trips)('%s', (_name, ride, published) => {
 });
 
 // The trip in from a station is the same ride with a way in and a way back: its route card must stay the ride's.
-describe.each(RIDES.flatMap(r => (rideIn(r) ? [[r.slug, r, rideIn(r)!] as const] : [])))('%s ridden in to', (_slug, ride, trip) => {
+describe.each(RIDES.flatMap(r => (tripIn(r) ? [[r.slug, r, tripIn(r)!] as const] : [])))('%s ridden in to', (_slug, ride, trip) => {
   const numbered = /climb \d+$/;
   const [own, whole] = [legs(ride), legs(trip)];
 

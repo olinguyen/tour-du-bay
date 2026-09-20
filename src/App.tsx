@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ListView, sequence, type Sort } from './components/ListView';
 import { RideView } from './components/RideView';
-import { findRide, rideIn } from './data/guide';
+import { findRide, tripFor } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
 import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
 import { savedPerspective, type Perspective } from './map/GuideMap';
@@ -19,7 +19,7 @@ export default function App() {
   /** ride in from the station rather than start where the ride does: one choice for the whole guide */
   const ridein = useRideIn();
   /** what the page and the map show for the open ride: the ride as planned, or the trip in from its other start */
-  const trip = useMemo(() => (ride && ridein && rideIn(ride)) || ride, [ride, ridein]);
+  const trip = useMemo(() => ride && tripFor(ride, ridein), [ride, ridein]);
   const [area, setArea] = useState<Area | null>(null);
   const [sort, setSort] = useState<Sort>({ key: 'miles', dir: 1 });
   const [hot, setHot] = useState<string | null>(null);
@@ -52,9 +52,9 @@ export default function App() {
   /** current state for callbacks that shouldn't re-subscribe on every change */
   const live = useRef({ collapsed: false, flying: false, mobile: isMobile, mapOpen, ride });
 
-  const displayed = useMemo(() => sequence(area, sort), [area, sort]);
+  const displayed = useMemo(() => sequence(area, sort, ridein), [area, sort, ridein]);
   // a ride reached by URL or "nearby" may sit outside the region filter; step through the whole guide then
-  const seq = useMemo(() => (ride && !displayed.includes(ride) ? sequence(null, sort) : displayed), [ride, displayed, sort]);
+  const seq = useMemo(() => (ride && !displayed.includes(ride) ? sequence(null, sort, ridein) : displayed), [ride, displayed, sort, ridein]);
 
   const openRide = useCallback((s: string) => navigate(s), [navigate]);
   const closeRide = useCallback(() => navigate(null), [navigate]);

@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useRef, type RefObject } from 'react';
-import { AREAS, RIDES, ridesIn } from '../data/guide';
+import { AREAS, RIDES, ridesIn, tripFor } from '../data/guide';
 import type { Area, Ride } from '../data/types';
 import { scrollBehavior } from '../lib/html';
 import { outline } from '../lib/profileChart';
 import { areaSlug, pad2, place } from '../lib/route';
 import { dist, distUnit, distWord, elev, elevUnit, elevWord, useUnits } from '../lib/measure';
+import { useRideIn } from '../lib/ridein';
 import { Sparkline } from './ProfileChart';
 
 export type SortKey = 'miles' | 'feet';
@@ -20,10 +21,13 @@ const SORT_KEYS: { k: SortKey; t: string }[] = [
 
 const plural = (n: number) => `${n} ride${n === 1 ? '' : 's'}`;
 
-/** rides in panel order: grouped by region, sorted within. Arrows, prev/next and the pager all follow this. */
-export function sequence(area: Area | null, sort: Sort): Ride[] {
+/**
+ * rides in panel order: grouped by region, sorted within. Arrows, prev/next and the pager all follow this. Riding in,
+ * the order is that of the figures the rows then show: a ride is as long as the trip it takes to ride it.
+ */
+export function sequence(area: Area | null, sort: Sort, ridingIn = false): Ride[] {
   const areas = area ? [area] : AREAS;
-  const by = (r: Ride) => (sort.key === 'miles' ? r.lengthMi : r.feet);
+  const by = (r: Ride) => (sort.key === 'miles' ? tripFor(r, ridingIn).lengthMi : tripFor(r, ridingIn).feet);
   return areas.flatMap(a => ridesIn(a).sort((x, y) => (by(x) - by(y)) * sort.dir));
 }
 
@@ -150,14 +154,17 @@ interface RowProps {
 
 const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
   const u = useUnits();
+  // the thumbnail stays the ride's own, which is what tells one ride from another; the figures and the start are
+  // those of the trip the reader would ride, as the map's tooltip and the ride's page give them
+  const t = tripFor(r, useRideIn());
   const shape = useMemo(() => outline(r.route), [r]);
-  const hours = r.hours.replace(/\s*h$/, '');
+  const hours = t.hours.replace(/\s*h$/, '');
   const desc = `row-desc-${r.slug}`;
   // the description precedes the button so the last row stays :last-child; the visible stats are hidden from AT in its favour
   return (
     <>
       <span className="sr-only" id={desc}>
-        {r.area} · {dist(r.lengthMi, u)} {distWord(u)} · {elev(r.feet, u)} {elevWord(u)} of climbing · {hours} hours · starts at {place(r.start)}
+        {r.area} · {dist(t.lengthMi, u)} {distWord(u)} · {elev(t.feet, u)} {elevWord(u)} of climbing · {hours} hours · starts at {place(t.start)}
       </span>
       <button
         className={'row' + (hot ? ' hot' : '')}
@@ -181,14 +188,14 @@ const Row = memo(function Row({ ride: r, hot, onHot, onOpen }: RowProps) {
         <span>
           <span className="name">{r.name}</span>
           <span className="stats" aria-hidden="true">
-            <span>{dist(r.lengthMi, u)} {distUnit(u)}</span>
+            <span>{dist(t.lengthMi, u)} {distUnit(u)}</span>
             <i>·</i>
-            <span>{elev(r.feet, u)} {elevUnit(u)}</span>
+            <span>{elev(t.feet, u)} {elevUnit(u)}</span>
             <i>·</i>
             <span>{hours} h</span>
           </span>
           <span className="row-sub" aria-hidden="true">
-            <span className="tag">{r.area}</span> · from {place(r.start)}
+            <span className="tag">{r.area}</span> · from {place(t.start)}
           </span>
         </span>
       </button>

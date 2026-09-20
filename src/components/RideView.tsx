@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { RIDES, rideIn, ridesIn } from '../data/guide';
+import { RIDES, ridesIn, tripIn } from '../data/guide';
 import type { Leg, Photo, Ride } from '../data/types';
 import { storage } from '../lib/html';
 import { areaSlug, hm, legs, pad2, place, roman } from '../lib/route';
@@ -38,7 +38,7 @@ export function RideView({ ride: r, base, seq, scrub, flying, hotPhoto, leg, onB
   const next = seq[(si + 1) % seq.length];
   const from = place(r.start);
   /** the ride has a second start whose legs have been generated; without them the start line names one start */
-  const twoStarts = !!base.from && rideIn(base) !== null;
+  const twoStarts = !!base.from && tripIn(base) !== null;
   const near = useMemo(() => {
     const same = ridesIn(base.area).filter(x => x !== base);
     return same.length ? same : RIDES.filter(x => x !== base).slice(0, 3);
