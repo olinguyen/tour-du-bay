@@ -4,7 +4,7 @@ import { RideView } from './components/RideView';
 import { findRide, tripFor } from './data/guide';
 import type { Area, Leg, Ride } from './data/types';
 import { phoneMedia, useFlyover, useGuideMap, useHashRoute, useMediaQuery } from './hooks';
-import { savedPerspective, type Perspective } from './map/GuideMap';
+import { savedPerspective, type FitMode, type Perspective } from './map/GuideMap';
 import { scrollBehavior } from './lib/html';
 import { dist, distUnit, elev, elevUnit, setUnits, useUnits, type Unit } from './lib/measure';
 import { setRideIn, useRideIn } from './lib/ridein';
@@ -28,6 +28,8 @@ export default function App() {
   const [peek, setPeek] = useState(false);
   const [photoHover, setPhotoHover] = useState<number | null>(null);
   const [leg, setLeg] = useState<Leg | null>(null);
+  /** what the fit button will do next; the map says when that changes, which is rarely */
+  const [fitMode, setFitMode] = useState<FitMode>('frame');
   const [scrub] = useState(() => createStore<Scrub>(null));
   /** phone layout: the panel is the page and the map a full-screen layer the toggle button swaps in */
   const isMobile = useMediaQuery(phoneMedia());
@@ -73,6 +75,7 @@ export default function App() {
       } else side.current!.scrollTo({ top: f.offsetTop - 24, behavior: scrollBehavior() });
     },
     onPerspective: setPerspective,
+    onFit: setFitMode,
     onBearing: deg => {
       const el = compass.current;
       if (!el) return;
@@ -275,6 +278,8 @@ export default function App() {
   const chipRide = useRef<Ride | null>(null);
   if (trip) chipRide.current = trip;
 
+  /** the fit button names what its next press does; "Face north" is the second press of a fit on a turned map */
+  const fitLabel = fitMode === 'north' ? 'Face north' : ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride';
   return (
     <>
       {/* the app routes on the hash, so a plain #side link would close an open ride: focus the panel directly */}
@@ -351,12 +356,15 @@ export default function App() {
           {/* four corner brackets, never a crosshair: that glyph means "my location" in every maps app, and this site
               never asks where the reader is. Mid-preview the camera is following the rider; framing is what stopping does. */}
           <button
-            title={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
-            aria-label={ride ? 'Frame the ride' : area ? 'Frame the region' : 'Frame every ride'}
+            className={fitMode === 'north' ? 'north' : undefined}
+            title={fitLabel}
+            aria-label={fitLabel}
             onClick={() => (flying ? toggleFly() : gm?.fit())}
           >
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" />
+              {/* a needle between the brackets while a press will face north: the second press of a fit */}
+              <path className="n" d="M8 4.2l2.5 7L8 9.7l-2.5 1.5z" />
             </svg>
           </button>
         </div>

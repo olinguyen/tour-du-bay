@@ -31,6 +31,8 @@ const PITCH = 42, TILT_MS = 900;
 const NORTH_MS = 600, ZOOM_MS = 350;
 
 export type Perspective = '2d' | '3d';
+/** what a press of the fit button will do: frame what is open, or (once that is framed and the map is turned) face north */
+export type FitMode = 'frame' | 'north';
 
 const VIEW_KEY = 'tdb.perspective';
 /** The perspective the reader last chose. 2D is the default: the terrain mesh is a second set of tiles to fetch. */
@@ -45,6 +47,8 @@ export interface GuideMapEvents {
   onPerspective?(mode: Perspective): void;
   /** the map turned: the compass follows (degrees clockwise from north, 0 when square) */
   onBearing?(deg: number): void;
+  /** what the fit button will do next changed: the button relabels itself */
+  onFit?(mode: FitMode): void;
 }
 
 /** [lat, lng] as MapLibre wants it */
@@ -103,6 +107,11 @@ export class GuideMap {
   private previewing = false;
   /** whether the floating panel is showing over the map's left edge; views are fitted around it */
   private covered = true;
+  /** the camera is where a fit put it: nothing has moved it since. A fit pressed now can face north instead */
+  private framed = false;
+  /** set around a fit's own camera move, so its movestart counts as framing rather than as leaving the frame */
+  private framing = false;
+  private fitMode: FitMode = 'frame';
   /** phone layout: the panel is a document under the map, which fills the screen when opened */
   private mobile = false;
   private loaded = false;
@@ -167,7 +176,18 @@ export class GuideMap {
       if ((e as { sourceId?: string }).sourceId === SRC.terrain && this.perspective === '3d') this.setPerspective('2d');
     });
     map.on('zoom', () => this.paintNames());
-    map.on('rotate', () => this.events.onBearing?.(map.getBearing()));
+    map.on('rotate', () => {
+      this.events.onBearing?.(map.getBearing());
+      this.tellFit();
+    });
+    map.on('pitch', () => this.tellFit());
+    // every camera move but a fit's own leaves the frame: a drag, a zoom button, the preview, the compass
+    map.on('movestart', () => {
+      this.framed = this.framing;
+      this.framing = false;
+      this.tellFit();
+    });
+    map.on('moveend', () => this.tellFit());
 
     this.observer = new ResizeObserver(() => {
       map.resize();
@@ -412,7 +432,7 @@ export class GuideMap {
 
   // ---- the reader's own camera moves (compass, zoom and fit buttons)
 
-  /** swing back to north, keeping the tilt; the compass is the one way back once the map has been turned */
+  /** swing back to north, keeping the tilt; the compass is the plain way back once the map has been turned */
   resetNorth() {
     this.map.resetNorth({ duration: this.instant() ? 0 : NORTH_MS });
   }
@@ -425,9 +445,31 @@ export class GuideMap {
     this.map.zoomOut({ duration: this.instant() ? 0 : ZOOM_MS });
   }
 
-  /** frame what is open: the ride, the region, or the whole guide */
+  /**
+   * frame what is open: the ride, the region, or the whole guide. A frame keeps the heading and tilt the reader
+   * turned to; pressed again while nothing has moved since, it faces north at the perspective's standard tilt,
+   * so the two presses together are "show me the ride, the usual way"
+   */
   fit() {
+    if (this.fitMode === 'north') {
+      this.framing = true;
+      this.map.easeTo({ bearing: 0, pitch: this.pitch(), duration: this.instant() ? 0 : NORTH_MS });
+      this.framing = false;
+      return;
+    }
     this.refit(0.9);
+  }
+
+  /** the map is off north, or off the perspective's standard tilt */
+  private turned() {
+    return Math.abs(this.map.getBearing()) > 0.5 || Math.abs(this.map.getPitch() - this.pitch()) > 0.5;
+  }
+
+  private tellFit() {
+    const mode: FitMode = this.framed && this.turned() ? 'north' : 'frame';
+    if (mode === this.fitMode) return;
+    this.fitMode = mode;
+    this.events.onFit?.(mode);
   }
 
   /** a running preview re-centres the camera every few frames, which would cut an eased move short: step instead */
@@ -438,6 +480,11 @@ export class GuideMap {
   /** the pitch the current perspective flies at; every camera move states it, so none undoes the tilt */
   private pitch() {
     return this.perspective === '3d' ? PITCH : 0;
+  }
+
+  /** the tilt a fit keeps: the reader's own in 3D, unless the map is mid-ease to the standard one */
+  private tilt() {
+    return this.perspective === '3d' && !this.map.isEasing() ? this.map.getPitch() : this.pitch();
   }
 
   /** a ride as planned, or the same ride in from its alternative start: a different object, drawn afresh */
@@ -687,8 +734,10 @@ export class GuideMap {
     this.view(() => {
       // fitBounds squares the map unless told otherwise: in 3D the view the reader turned to survives a fit
       const bearing = this.perspective === '3d' ? this.map.getBearing() : 0;
-      const opts = { padding: this.pad(kind), pitch: this.pitch(), bearing, duration: reducedMotion() ? 0 : duration * 1000 };
+      const opts = { padding: this.pad(kind), pitch: this.tilt(), bearing, duration: reducedMotion() ? 0 : duration * 1000 };
+      this.framing = true;
       this.map.fitBounds(box(b), opts);
+      this.framing = false;
     });
   }
 
