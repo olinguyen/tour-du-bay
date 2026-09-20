@@ -15,8 +15,13 @@ interface Mark {
   h: number;
   /** the zoom it appears at: the city's five would pile up on each other from further out */
   from: number;
-  /** lift the drawing clear of a ride's start dot and name that share its place */
-  lift?: boolean;
+  /**
+   * px to move the drawing off its place, right and up: clear of a ride's start dot and name, or off a ride's line,
+   * which always wins the pointer and would leave the drawing unnameable
+   */
+  nudge?: [number, number];
+  /** line drawings have no painted area to point at, so their whole box takes the pointer */
+  box?: boolean;
   /** a drawing that has no 3D model to hand over to: it shows in 2D only */
   only2d?: boolean;
   svg: string;
@@ -58,6 +63,7 @@ const MARKS: Mark[] = [
   {
     name: 'Sutro Tower',
     note: "the city's television mast, 1973",
+    box: true,
     at: [-122.45286, 37.75524],
     w: 16,
     h: 30,
@@ -80,7 +86,9 @@ const MARKS: Mark[] = [
     w: 30,
     h: 18,
     from: 11,
-    lift: true,
+    // below its place: the Hawk Hill start and its name are just north of it, nearer or further with the zoom
+    nudge: [0, -22],
+    box: true,
     svg: `<path fill="#b5674b" d="M9 7.5 A6 6 0 0 1 21 7.5 Z"/><path ${INK} d="M8 7.5 H22 V9.5 H8 Z M0 17 H30 V18 H0 Z M0 11.5 H6 V12.6 H0 Z M24 11.5 H30 V12.6 H24 Z"/><path ${LINE} stroke-width="1.4" d="M9.5 9.5 V17 M13 9.5 V17 M17 9.5 V17 M20.5 9.5 V17"/><path ${LINE} stroke-width="0.9" d="M1 12.6 V17 M3 12.6 V17 M5 12.6 V17 M25 12.6 V17 M27 12.6 V17 M29 12.6 V17"/>`,
   },
   // ---- 2D only: places with no model
@@ -141,7 +149,7 @@ const MARKS: Mark[] = [
     w: 22,
     h: 16,
     from: 0,
-    lift: true,
+    nudge: [0, 26],
     only2d: true,
     svg: `<path ${INK} d="M0 10 H22 V16 H0 Z M7 5 H15 V10 H7 Z M10 2 H12 V5 H10 Z"/><circle cx="11" cy="1.4" r="1.4" fill="#c4432b"/>`,
   },
@@ -162,8 +170,7 @@ const MARKS: Mark[] = [
     w: 28,
     h: 14,
     from: 10.6,
-    // the ride crosses the dam, and a ride's line always wins the pointer: lifted, the drawing can still be named
-    lift: true,
+    nudge: [0, 26],
     only2d: true,
     svg: `<path ${INK} d="M2 3.5 H26 L22 14 H6 Z"/><path fill="none" stroke="#7fa0a3" stroke-width="1.4" stroke-linecap="round" d="M0 2 H28"/><path fill="var(--page)" d="M12.5 3.5 H15.5 V7 H12.5 Z"/>`,
   },
@@ -177,12 +184,104 @@ const MARKS: Mark[] = [
     only2d: true,
     svg: `<path ${INK} d="M6 20 Q9 12 13 12 H17 Q20 14 22 20 Z M13.5 5.5 H16.5 V12 H13.5 Z M13.9 3 H16.1 V5.5 H13.9 Z M15 1.2 L16.6 3 H13.4 Z"/><path ${GREY} stroke-width="0.8" d="M0 12.5 Q5 15 10 12.8 M0 12.5 V14 M3.3 13.6 V15 M6.6 13.6 V15"/>`,
   },
+  // ---- 2D only, the second batch
+  {
+    name: 'The Painted Ladies',
+    note: 'Alamo Square, 1890s',
+    at: [-122.432786, 37.776224],
+    w: 30,
+    h: 16,
+    from: 12,
+    only2d: true,
+    svg: `<path ${INK} d="M1 16 V7 L4 2.5 L7 7 V16 Z M8 16 V7 L11 2.5 L14 7 V16 Z M15 16 V7 L18 2.5 L21 7 V16 Z M22 16 V7 L25 2.5 L28 7 V16 Z"/><path fill="var(--page)" d="M3 9 H5 V12 H3 Z M10 9 H12 V12 H10 Z M17 9 H19 V12 H17 Z M24 9 H26 V12 H24 Z"/>`,
+  },
+  {
+    name: 'Conservatory of Flowers',
+    note: 'Golden Gate Park, 1879',
+    at: [-122.460227, 37.772607],
+    w: 32,
+    h: 16,
+    from: 12,
+    only2d: true,
+    svg: `<path ${INK} d="M10 10.5 A6 7.5 0 0 1 22 10.5 Z M0 10.5 Q5 6.5 10 10.5 Z M22 10.5 Q27 6.5 32 10.5 Z M0 10.5 H32 V16 H0 Z M15.6 0 H16.4 V3.4 H15.6 Z"/><path fill="var(--page)" d="M2 12 H8 V13 H2 Z M12 12 H20 V13 H12 Z M24 12 H30 V13 H24 Z"/>`,
+  },
+  {
+    name: 'The Dutch Windmill',
+    note: 'Golden Gate Park, 1903',
+    at: [-122.5095, 37.7705],
+    w: 22,
+    h: 26,
+    from: 11.4,
+    only2d: true,
+    svg: `<path ${INK} d="M7.5 26 L9.5 10 H12.5 L14.5 26 Z M9 10 Q11 6 13 10 Z"/><path ${GREY} stroke-width="1.5" d="M2 1 L20 15 M20 1 L2 15"/>`,
+  },
+  {
+    name: 'Fort Point',
+    note: 'under the bridge, 1861',
+    at: [-122.476882, 37.810486],
+    w: 27,
+    h: 12,
+    from: 12.2,
+    nudge: [-24, 0],
+    only2d: true,
+    svg: `<path fill="#9a5f4a" d="M0 4 H27 V12 H0 Z M0 2.5 H3 V4 H0 Z M6 2.5 H9 V4 H6 Z M12 2.5 H15 V4 H12 Z M18 2.5 H21 V4 H18 Z M24 2.5 H27 V4 H24 Z"/><path fill="var(--page)" d="M2 12 V9.5 Q3.5 7.5 5 9.5 V12 Z M7 12 V9.5 Q8.5 7.5 10 9.5 V12 Z M12 12 V9.5 Q13.5 7.5 15 9.5 V12 Z M17 12 V9.5 Q18.5 7.5 20 9.5 V12 Z M22 12 V9.5 Q23.5 7.5 25 9.5 V12 Z"/>`,
+  },
+  {
+    name: 'Muir Woods',
+    note: 'old-growth redwoods',
+    at: [-122.572484, 37.892796],
+    w: 18,
+    h: 28,
+    from: 10.6,
+    only2d: true,
+    svg: `<path ${INK} d="M4.2 20 H5.8 V28 H4.2 Z M12.3 22 H13.7 V28 H12.3 Z"/><path fill="#6f7d55" d="M5 0 L9 21 H1 Z M13 7 L16.5 23 H9.5 Z"/>`,
+  },
+  {
+    name: 'Marin Civic Center',
+    note: 'Frank Lloyd Wright, 1962',
+    at: [-122.530657, 37.998027],
+    w: 36,
+    h: 16,
+    from: 10.2,
+    only2d: true,
+    svg: `<path fill="#6f93a8" d="M0 9 Q18 3.5 36 9 V10.2 H0 Z"/><path ${INK} d="M0 10.2 H36 V16 H0 Z"/><path fill="var(--page)" d="M1.5 14 V12 Q3.0 10.4 4.5 12 V14 Z M5.8 14 V12 Q7.3 10.4 8.8 12 V14 Z M10.1 14 V12 Q11.6 10.4 13.1 12 V14 Z M14.4 14 V12 Q15.9 10.4 17.4 12 V14 Z M18.7 14 V12 Q20.2 10.4 21.7 12 V14 Z M23.0 14 V12 Q24.5 10.4 26.0 12 V14 Z M27.3 14 V12 Q28.8 10.4 30.3 12 V14 Z M31.6 14 V12 Q33.1 10.4 34.6 12 V14 Z"/><path fill="#c9a54a" d="M23.1 6.2 L24 0 L24.9 6.2 Z"/>`,
+  },
+  {
+    name: 'The Oakland cranes',
+    note: 'Port of Oakland',
+    box: true,
+    at: [-122.3225, 37.8005],
+    w: 28,
+    h: 24,
+    from: 10.8,
+    only2d: true,
+    svg: `<path ${GREY} stroke-width="1.3" d="M2 24 V9 M8 24 V9 M0 9 H10 M2 15 H8 M8 9 L15 2 M5 9 V4 L8 9 M5 4 L15 2"/><g transform="translate(13 0)"><path ${GREY} stroke-width="1.3" d="M2 24 V9 M8 24 V9 M0 9 H10 M2 15 H8 M8 9 L15 2 M5 9 V4 L8 9 M5 4 L15 2"/></g>`,
+  },
+  {
+    name: 'Hoover Tower',
+    note: 'Stanford, 1941',
+    at: [-122.166994, 37.427615],
+    w: 12,
+    h: 30,
+    from: 11.2,
+    only2d: true,
+    svg: `<path ${INK} d="M3.5 30 V9 H8.5 V30 Z M2.5 6.5 H9.5 V9 H2.5 Z M3.5 4 H8.5 V6.5 H3.5 Z M5.7 0 H6.3 V1.6 H5.7 Z"/><path fill="#b5674b" d="M3.5 4 A2.5 2.8 0 0 1 8.5 4 Z"/><path fill="var(--page)" d="M4.2 4.6 H5 V6 H4.2 Z M5.6 4.6 H6.4 V6 H5.6 Z M7 4.6 H7.8 V6 H7 Z"/>`,
+  },
+  {
+    name: "Alice's Restaurant",
+    note: 'Skyline at Highway 84',
+    at: [-122.265398, 37.386691],
+    w: 22,
+    h: 14,
+    from: 10.8,
+    nudge: [24, 12],
+    only2d: true,
+    svg: `<path ${INK} d="M0 7 L11 1 L22 7 Z M2 7 H20 V14 H2 Z M15.5 1 H17.5 V5 H15.5 Z"/><path fill="var(--page)" d="M4 9 H7 V14 H4 Z M9.5 9 H12.5 V12 H9.5 Z M15 9 H18 V12 H15 Z"/>`,
+  },
 ];
 
 /** in 3D the grown models already read at zoom 10.5, so the drawings are for the home view only; 2D has no models, so there they stay */
 const MODELS_FROM = 9.9;
-
-const LIFT = 26;
 
 /**
  * The drawings are decoration and the rides are what the map is for, so a drawing never takes a hover or a click from
@@ -204,7 +303,7 @@ export function addLandmarkMarks(map: MlMap): Marker[] {
     shown = m;
     tip
       .setLngLat(m.at)
-      .setOffset([0, -(m.h + (m.lift ? LIFT : 0) + 6)])
+      .setOffset([m.nudge?.[0] ?? 0, -(m.h + (m.nudge?.[1] ?? 0) + 6)])
       .setHTML(`<span>${esc(m.name)}</span><small>${esc(m.note)}</small>`)
       .addTo(map);
   };
@@ -218,7 +317,10 @@ export function addLandmarkMarks(map: MlMap): Marker[] {
     el.className = 'mk lm';
     el.setAttribute('role', 'img');
     el.setAttribute('aria-label', m.name);
-    el.innerHTML = `<svg class="${m.lift ? 'lifted' : ''}" width="${m.w}" height="${m.h}" viewBox="0 0 ${m.w} ${m.h}" aria-hidden="true">${m.svg}</svg>`;
+    const hitBox = m.box ? `<rect width="${m.w}" height="${m.h}" fill="none"/>` : '';
+    el.innerHTML = `<svg width="${m.w}" height="${m.h}" viewBox="0 0 ${m.w} ${m.h}" aria-hidden="true">${hitBox}${m.svg}</svg>`;
+    // set through the CSSOM, which the page's CSP allows where it would refuse a style attribute
+    if (m.nudge) (el.firstElementChild as SVGElement).style.transform = `translate(calc(-50% + ${m.nudge[0]}px), calc(-100% - ${m.nudge[1]}px))`;
     el.addEventListener('mousemove', (e) => {
       if (overRide(e)) {
         if (!pinned) hide();

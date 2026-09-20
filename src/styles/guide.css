@@ -38,7 +38,6 @@ h1,h2,h3,p{margin:0}
 .lm.go svg *{cursor:pointer}
 .lm.off svg *{pointer-events:none}
 .lm.off svg{opacity:0}
-.lm svg.lifted{transform:translate(-50%,calc(-100% - 26px))}
 .lbl{pointer-events:none}
 .lbl span{display:block;white-space:nowrap;transform:translate(-50%,-50%);color:var(--label);text-shadow:0 0 3px var(--halo),0 0 6px var(--halo);transition:opacity .35s}
 .lbl.off span{opacity:0}
