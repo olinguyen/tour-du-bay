@@ -31,6 +31,10 @@ h1,h2,h3,p{margin:0}
 .maplibregl-ctrl-bottom-left .maplibregl-ctrl,.maplibregl-ctrl-bottom-right .maplibregl-ctrl{margin:0}
 /* every glyph on the map is an HTML marker in a zero-size wrapper, so the element inside positions itself */
 .mk{width:0;height:0;line-height:0}
+/* PROTOTYPE (?landmark=big): landmark silhouettes; the drawing stands on its place */
+.lm svg{display:block;overflow:visible;transform:translate(-50%,-100%);cursor:pointer;opacity:.88;filter:drop-shadow(0 0 1.5px var(--halo)) drop-shadow(0 0 2px var(--halo));transition:opacity .35s}
+.lm.off svg{opacity:0;pointer-events:none}
+.lm svg.lifted{transform:translate(-50%,calc(-100% - 26px))}
 .lbl{pointer-events:none}
 .lbl span{display:block;white-space:nowrap;transform:translate(-50%,-50%);color:var(--label);text-shadow:0 0 3px var(--halo),0 0 6px var(--halo);transition:opacity .35s}
 .lbl.off span{opacity:0}

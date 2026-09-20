@@ -339,6 +339,7 @@ export class GuideMap {
     } else if (LANDMARK === 'three' || LANDMARK === 'big') {
       import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
         this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big'));
+        if (LANDMARK === 'big') import('./landmarkMarks').then(({ addLandmarkMarks }) => addLandmarkMarks(this.map));
         this.landmarkIds = [LANDMARK_3D];
         this.showLandmarks(this.perspective);
       });
