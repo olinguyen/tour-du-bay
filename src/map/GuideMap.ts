@@ -142,7 +142,8 @@ export class GuideMap {
 
     this.tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', offset: 14, maxWidth: 'none' });
     // the tooltip carries the hot ride's name, so the stylesheet drops the copy beside its start dot while it is open;
-    // a ride made hot from the list or the keyboard has no tooltip, and keeps its label
+    // a ride made hot from the list or the keyboard has no tooltip, and keeps its label. That holds zoomed in too,
+    // where every ride's name shows (paintNames): the others' go as they dim, and the hot one's goes with them
     this.tip.on('open', () => document.body.classList.add('tipped'));
     this.tip.on('close', () => document.body.classList.remove('tipped'));
     this.rider = marker(map, [0, 0], '<div class="rider"></div>', 'rider-mk');
