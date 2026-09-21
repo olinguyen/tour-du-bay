@@ -13,6 +13,11 @@ import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
+import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
+
+/** which landmark layer draws: ?landmark=three (the default), big (PROTOTYPE: grown when zoomed out, shadowed, inked), extrude, or none */
+const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
+const LANDMARK = LANDMARK_PARAM ?? 'three';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 /** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
@@ -37,6 +42,11 @@ export type FitMode = 'frame' | 'north';
 const VIEW_KEY = 'tdb.perspective';
 /** The perspective the reader last chose. 2D is the default: the terrain mesh is a second set of tiles to fetch. */
 export const savedPerspective = (): Perspective => (storage.get(VIEW_KEY) === '3d' ? '3d' : '2d');
+/**
+ * How far in each perspective zooms. The relief comes from zoom 14 tiles, so 2D stops where it is sharp; 3D goes on
+ * to 16 for the landmarks, which only read up close, over the same tiles stretched (smooth, if soft, on a hillside).
+ */
+const MAX_ZOOM: Record<Perspective, number> = { '2d': 14, '3d': 16 };
 
 export interface GuideMapEvents {
   onHover(slug: string | null): void;
@@ -129,7 +139,7 @@ export class GuideMap {
       fitBoundsOptions: { padding: 20 },
       pitch: savedPerspective() === '3d' ? PITCH : 0,
       minZoom: 9,
-      maxZoom: 14,
+      maxZoom: MAX_ZOOM[savedPerspective()],
       maxPitch: 60,
       maxBounds: box(MAX_BOUNDS),
       attributionControl: false,
@@ -143,6 +153,9 @@ export class GuideMap {
       touchPitch: true,
     }));
     this.allowTurning(this.perspective === '3d');
+    // PROTOTYPE: a handle for the screenshot script
+    // a handle for the headless screenshot script, only on a page that spells the landmark flag out
+    if (LANDMARK_PARAM) (window as unknown as { tdbMap?: MlMap }).tdbMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     const scale = new maplibregl.ScaleControl({ maxWidth: 80, unit: units.get() });
     map.addControl(scale, 'bottom-left');
@@ -168,6 +181,7 @@ export class GuideMap {
       this.addStarts();
       this.addLabels();
       this.loadWater();
+      this.addLandmarks();
       this.paint();
       this.flushView();
     });
@@ -315,6 +329,26 @@ export class GuideMap {
     this.paintNames();
   }
 
+  /** PROTOTYPE: the Golden Gate, shown in 3D only (from above an extrusion is just its footprint) */
+  private landmarkIds: string[] = [];
+  private addLandmarks() {
+    if (LANDMARK === 'extrude') {
+      addExtrudedLandmarks(this.map);
+      this.landmarkIds = [LANDMARK_LYR];
+      this.showLandmarks(this.perspective);
+    } else if (LANDMARK === 'three' || LANDMARK === 'big') {
+      import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
+        this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big'));
+        if (LANDMARK === 'big') import('./landmarkMarks').then(({ addLandmarkMarks }) => addLandmarkMarks(this.map));
+        this.landmarkIds = [LANDMARK_3D];
+        this.showLandmarks(this.perspective);
+      });
+    }
+  }
+  private showLandmarks(mode: Perspective) {
+    for (const id of this.landmarkIds) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', mode === '3d' ? 'visible' : 'none');
+  }
+
   /** the polygons are ~400 KB; loading them as their own chunk keeps them off the app's critical path */
   private loadWater() {
     import('../data/bay-water.json')
@@ -410,8 +444,11 @@ export class GuideMap {
     const changed = mode !== this.perspective;
     this.perspective = mode;
     this.allowTurning(mode === '3d');
+    // past 14 is 3D's alone: leaving it there pulls the camera back to the 2D cap
+    this.map.setMaxZoom(MAX_ZOOM[mode]);
     if (changed) this.events.onPerspective?.(mode);
     if (this.loaded) this.map.setTerrain(mode === '3d' ? { source: SRC.terrain, exaggeration: 1 } : null);
+    if (this.loaded) this.showLandmarks(mode);
   }
 
   /** 2D stays north-up and flat, so every way of turning or tilting the map (mouse, touch, keyboard) is 3D-only */

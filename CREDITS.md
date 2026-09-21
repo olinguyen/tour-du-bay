@@ -27,3 +27,11 @@ under the [3-Clause BSD licence](https://github.com/maplibre/maplibre-gl-js/blob
 npm dependency, so its licence ships with the package. The style in `src/map/style.ts` is written from scratch against
 the two elevation sources and the local water polygons above: the map loads no vector-tile basemap, sprite sheet or
 glyph server, and so makes no request to any hosted map service.
+
+**three.js.** The landmarks that stand on the terrain in 3D (`src/map/landmarks3d.ts`) are drawn by
+[three.js](https://threejs.org/) under the [MIT licence](https://github.com/mrdoob/three.js/blob/dev/LICENSE), an
+ordinary npm dependency that the page loads only once the reader is in 3D. Every model is built in code from published
+dimensions (the bridge district's for the Golden Gate Bridge, the National Register descriptions for the rest): no
+model file, texture or photograph is downloaded. Where Sutro Tower, the buildings on Alcatraz, the Palace of Fine
+Arts, the Transamerica Pyramid and Salesforce Tower stand, the Palace's plan and the outline of its lagoon are measured from OpenStreetMap's building and water
+outlines (© OpenStreetMap contributors, ODbL, as above; retrieved September 20, 2026).
