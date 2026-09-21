@@ -12,73 +12,15 @@
 // Usage: node scripts/fetch-water.mjs [--tolerance=50] [--min-area=0.2] [--cache=/tmp/overpass.json]
 //   (Node >= 18, no dependencies; --cache keeps the raw Overpass response so tuning runs don't refetch ~50 MB)
 
-import { readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { BBOX, DATA, E, N, S, W, arg, area, overpass, pointInRing, polygonFeature, relationRings, same } from './lib/osm-polygons.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(HERE, '../src/data/bay-water.json');
-const OVERPASS = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter';
-/** the map's bounds, shared with GuideMap's MAX_BOUNDS; written into the output so terrain.ts knows this extent */
-const { s: S, w: W, n: N, e: E } = JSON.parse(await readFile(resolve(HERE, '../src/data/map-bounds.json'), 'utf8'));
-const arg = (name, dflt) => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').split('=')[1] || dflt;
+const OUT = resolve(DATA, 'bay-water.json');
 const TOLERANCE_M = Number(arg('tolerance', 50));
 const MIN_AREA_KM2 = Number(arg('min-area', 0.2));
 const CACHE = arg('cache', '');
 const MAX_BYTES = 400 * 1024;
-
-// ---- geometry helpers (planar, in metres; good enough at this scale)
-const M_LAT = 111_320, M_LON = 111_320 * Math.cos((((S + N) / 2) * Math.PI) / 180);
-const toM = ([lon, lat]) => [(lon - W) * M_LON, (lat - S) * M_LAT];
-const round5 = v => Math.round(v * 1e5) / 1e5;
-const same = (a, b) => a[0] === b[0] && a[1] === b[1];
-
-/** signed area in km² (planar); positive = counter-clockwise */
-function area(ring) {
-  let a = 0;
-  for (let i = 0, n = ring.length - 1; i < n; i++) {
-    const [x1, y1] = toM(ring[i]), [x2, y2] = toM(ring[i + 1]);
-    a += x1 * y2 - x2 * y1;
-  }
-  return a / 2e6;
-}
-
-function pointInRing([px, py], ring) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j];
-    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-/** Douglas-Peucker, iterative; keeps the end points */
-function simplify(pts, tol) {
-  if (pts.length <= 2) return pts;
-  const m = pts.map(toM), keep = new Uint8Array(pts.length), stack = [[0, pts.length - 1]];
-  keep[0] = keep[pts.length - 1] = 1;
-  while (stack.length) {
-    const [a, b] = stack.pop();
-    if (b - a < 2) continue;
-    const [ax, ay] = m[a], [bx, by] = m[b], dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-    let best = -1, bestD = tol;
-    for (let i = a + 1; i < b; i++) {
-      const [px, py] = m[i];
-      const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
-      const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-      if (d > bestD) (best = i), (bestD = d);
-    }
-    if (best >= 0) (keep[best] = 1), stack.push([a, best], [best, b]);
-  }
-  return pts.filter((_, i) => keep[i]);
-}
-
-/** Simplify a closed ring; drops rings that collapse to nothing. */
-function simplifyRing(ring, tol) {
-  const out = simplify(ring, tol);
-  if (out.length < 4) return null;
-  return out;
-}
 
 // ---- chaining ways into linestrings by shared end nodes
 /** Joins ways (arrays of {nodes, geometry}) end to start. Returns {rings, lines} of [lon, lat] arrays. */
@@ -213,56 +155,15 @@ function closeCoast(pieces) {
   return rings;
 }
 
-// ---- water relations: assemble outer/inner member ways into rings
-function relationRings(rel, role) {
-  const members = rel.members.filter(m => m.type === 'way' && m.role === role && m.geometry);
-  // members carry no node ids with `out geom` and run in either direction, so join on coordinates, flipping as needed
-  const pool = new Set(members), rings = [];
-  while (pool.size) {
-    const [w] = pool;
-    pool.delete(w);
-    const pts = w.geometry.map(p => [p.lon, p.lat]);
-    let progressed = true;
-    while (!same(pts[0], pts[pts.length - 1]) && progressed) {
-      progressed = false;
-      const tail = pts[pts.length - 1];
-      for (const c of pool) {
-        const g = c.geometry.map(p => [p.lon, p.lat]);
-        if (same(g[0], tail)) pts.push(...g.slice(1));
-        else if (same(g[g.length - 1], tail)) pts.push(...g.reverse().slice(1));
-        else continue;
-        pool.delete(c);
-        progressed = true;
-        break;
-      }
-    }
-    if (same(pts[0], pts[pts.length - 1]) && pts.length >= 4) rings.push(pts);
-  }
-  return rings;
-}
-
 // ---- main
-async function overpass(query) {
-  if (CACHE) {
-    const cached = await readFile(CACHE, 'utf8').catch(() => null);
-    if (cached) return JSON.parse(cached);
-  }
-  const res = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
-  if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const text = await res.text();
-  if (CACHE) await writeFile(CACHE, text);
-  return JSON.parse(text);
-}
-
-const bbox = `${S},${W},${N},${E}`;
 console.log('fetching coastline + water from Overpass…');
 const data = await overpass(`[out:json][timeout:300];
 (
-  way[natural=coastline](${bbox});
-  way[natural=water](${bbox});
-  relation[natural=water][type=multipolygon](${bbox});
+  way[natural=coastline](${BBOX});
+  way[natural=water](${BBOX});
+  relation[natural=water][type=multipolygon](${BBOX});
 );
-out geom;`);
+out geom;`, CACHE);
 const els = data.elements;
 const coastWays = els.filter(e => e.type === 'way' && e.tags?.natural === 'coastline');
 const waterWays = els.filter(e => e.type === 'way' && e.tags?.natural === 'water');
@@ -291,16 +192,9 @@ seaOuters.push(...closeCoast(pieces));
 console.log(`  sea: ${seaOuters.length} outer ring(s), ${islands.length} island(s)`);
 
 const features = [];
-const orient = (ring, ccw) => ((area(ring) > 0) === ccw ? ring : ring.slice().reverse());
 const polygon = (outer, holes, props) => {
-  const o = simplifyRing(outer, TOLERANCE_M);
-  if (!o) return;
-  const hs = holes.map(h => simplifyRing(h, TOLERANCE_M)).filter(h => h && Math.abs(area(h)) >= MIN_AREA_KM2 / 4);
-  features.push({
-    type: 'Feature',
-    properties: props,
-    geometry: { type: 'Polygon', coordinates: [orient(o, true), ...hs.map(h => orient(h, false))].map(r => r.map(p => p.map(round5))) },
-  });
+  const f = polygonFeature(outer, holes, props, TOLERANCE_M, MIN_AREA_KM2 / 4);
+  if (f) features.push(f);
 };
 for (const outer of seaOuters) {
   const holes = islands.filter(i => pointInRing(i[0], outer));

@@ -23,7 +23,7 @@ const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
 const LANDMARK = LANDMARK_PARAM ?? 'big';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
-/** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
+/** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs and fetch-parks.mjs cover */
 const MAX_BOUNDS: [LatLng, LatLng] = [[MAP_BOUNDS.s, MAP_BOUNDS.w], [MAP_BOUNDS.n, MAP_BOUNDS.e]];
 /** interval between the preview's camera moves (ms) */
 const FOLLOW_MS = 50;
@@ -184,6 +184,7 @@ export class GuideMap {
       this.addStarts();
       this.addLabels();
       this.loadWater();
+      this.loadParks();
       this.addLandmarks();
       this.paint();
       this.flushView();
@@ -376,6 +377,16 @@ export class GuideMap {
         // offline before the chunk arrived, or a stale page after a redeploy: the relief stands on its own
         console.warn('water polygons failed to load; the map draws relief only', err);
       });
+  }
+
+  /** parks and open space, as their own chunk like the water */
+  private loadParks() {
+    import('../data/bay-parks.json')
+      .then(mod => {
+        if (!this.map.getSource(SRC.parks)) return;
+        (this.map.getSource(SRC.parks) as maplibregl.GeoJSONSource).setData(mod.default as FeatureCollection);
+      })
+      .catch(err => console.warn('park polygons failed to load; the map draws without them', err));
   }
 
   // ---- state from React
