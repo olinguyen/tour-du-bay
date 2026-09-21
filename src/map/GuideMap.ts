@@ -12,6 +12,7 @@ import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
+import { addFog } from './fog';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
@@ -23,7 +24,7 @@ const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
 const LANDMARK = LANDMARK_PARAM ?? 'big';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
-/** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
+/** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs and fetch-parks.mjs cover */
 const MAX_BOUNDS: [LatLng, LatLng] = [[MAP_BOUNDS.s, MAP_BOUNDS.w], [MAP_BOUNDS.n, MAP_BOUNDS.e]];
 /** interval between the preview's camera moves (ms) */
 const FOLLOW_MS = 50;
@@ -128,6 +129,7 @@ export class GuideMap {
   /** phone layout: the panel is a document under the map, which fills the screen when opened */
   private mobile = false;
   private loaded = false;
+  private stopFog = () => {};
   /** the latest view change requested before the style had loaded or the container had a size */
   private pendingView: (() => void) | null = null;
 
@@ -184,6 +186,8 @@ export class GuideMap {
       this.addStarts();
       this.addLabels();
       this.loadWater();
+      this.loadParks();
+      this.stopFog = addFog(this.map);
       this.addLandmarks();
       this.paint();
       this.flushView();
@@ -219,6 +223,7 @@ export class GuideMap {
     this.clearTimers(this.timers);
     this.clearTimers(this.flyTimers);
     this.observer.disconnect();
+    this.stopFog();
     this.map.remove();
     document.body.classList.remove('names', 'tipped');
   }
@@ -376,6 +381,16 @@ export class GuideMap {
         // offline before the chunk arrived, or a stale page after a redeploy: the relief stands on its own
         console.warn('water polygons failed to load; the map draws relief only', err);
       });
+  }
+
+  /** parks and open space, as their own chunk like the water */
+  private loadParks() {
+    import('../data/bay-parks.json')
+      .then(mod => {
+        if (!this.map.getSource(SRC.parks)) return;
+        (this.map.getSource(SRC.parks) as maplibregl.GeoJSONSource).setData(mod.default as FeatureCollection);
+      })
+      .catch(err => console.warn('park polygons failed to load; the map draws without them', err));
   }
 
   // ---- state from React

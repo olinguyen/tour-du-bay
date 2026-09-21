@@ -20,12 +20,18 @@ lakes and reservoirs inside the map's bounds, built by `scripts/fetch-water.mjs`
 50 m and keeping water bodies of 0.2 km² and up (the script's defaults). Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the
 [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/) (ODbL). Retrieved September 13, 2026.
 
+**Parks.** `src/data/bay-parks.json` holds the parks, preserves and other protected open space inside the map's bounds,
+the green under the relief, built by `scripts/fetch-parks.mjs` from OpenStreetMap (`leisure=park` and
+`leisure=nature_reserve`, `boundary=protected_area` and `boundary=national_park`, as ways and relations) via the
+Overpass API, simplified to about 80 m and keeping areas of 1 km² and up (the script's defaults). Data ©
+OpenStreetMap contributors, ODbL, as above. Retrieved September 20, 2026.
+
 ## Renderer
 
 **MapLibre GL JS.** The map is drawn by [MapLibre GL JS](https://maplibre.org/), a community fork of Mapbox GL JS,
 under the [3-Clause BSD licence](https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt). It is an ordinary
 npm dependency, so its licence ships with the package. The style in `src/map/style.ts` is written from scratch against
-the two elevation sources and the local water polygons above: the map loads no vector-tile basemap, sprite sheet or
+the two elevation sources and the local water and park polygons above: the map loads no vector-tile basemap, sprite sheet or
 glyph server, and so makes no request to any hosted map service.
 
 **three.js.** The landmarks that stand on the terrain in 3D (`src/map/landmarks3d.ts`) are drawn by

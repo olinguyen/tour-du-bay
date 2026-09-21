@@ -1,6 +1,7 @@
 // The map's look, as a MapLibre style. Relief is shaded by MapLibre from the same public-domain elevation tiles the
 // canvas hillshade used before; water is the vector overlay from OpenStreetMap (src/data/bay-water.json, built by
-// scripts/fetch-water.mjs) drawn over the relief so the shaded sea floor never shows through.
+// scripts/fetch-water.mjs) drawn over the relief so the shaded sea floor never shows through; parks are its green
+// counterpart (src/data/bay-parks.json, scripts/fetch-parks.mjs), laid under the relief.
 import type { Feature, FeatureCollection, LineString, Polygon, Position } from 'geojson';
 import type { FilterSpecification, StyleSpecification } from 'maplibre-gl';
 import MAP_BOUNDS from '../data/map-bounds.json';
@@ -8,7 +9,7 @@ import MAP_BOUNDS from '../data/map-bounds.json';
 /** AWS Terrain Tiles, Terrarium encoding: elev_m = R*256 + G + B/256 − 32768. USGS 3DEP/SRTM + NOAA ETOPO1, CORS *. */
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const ATTRIBUTION =
-  'Terrain: USGS 3DEP/SRTM &amp; NOAA ETOPO1 via AWS Terrain Tiles · Water © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  'Terrain: USGS 3DEP/SRTM &amp; NOAA ETOPO1 via AWS Terrain Tiles · Water &amp; parks © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /** a colour from the stylesheet's palette (guide.css :root), so the style and the CSS cannot drift apart */
 const swatch = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -23,6 +24,7 @@ export const SRC = {
   relief: 'relief-dem',
   /** the DEM the 3D terrain mesh reads */
   terrain: 'terrain-dem',
+  parks: 'parks',
   water: 'water',
   coast: 'coast',
   routes: 'routes',
@@ -35,6 +37,7 @@ export const SRC = {
 
 export const LYR = {
   paper: 'paper',
+  parks: 'park-fill',
   relief: 'relief',
   water: 'water-fill',
   waterEdge: 'water-edge',
@@ -71,6 +74,7 @@ export function mapStyle(): StyleSpecification {
     sources: {
       [SRC.relief]: dem(ATTRIBUTION),
       [SRC.terrain]: dem(),
+      [SRC.parks]: { type: 'geojson', data: empty() },
       [SRC.water]: { type: 'geojson', data: empty() },
       [SRC.coast]: { type: 'geojson', data: empty() },
       [SRC.routes]: { type: 'geojson', data: empty(), promoteId: 'slug' },
@@ -81,6 +85,8 @@ export function mapStyle(): StyleSpecification {
     },
     layers: [
       { id: LYR.paper, type: 'background', paint: { 'background-color': swatch('--ground') } },
+      // under the relief, opaque: the hills shade the green as they shade the paper, and overlapping parks don't stack
+      { id: LYR.parks, type: 'fill', source: SRC.parks, paint: { 'fill-color': swatch('--park'), 'fill-antialias': false } },
       {
         id: LYR.relief,
         type: 'hillshade',
