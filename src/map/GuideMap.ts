@@ -12,6 +12,7 @@ import { areaSlug, climbs, pad2, place } from '../lib/route';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { rideIn } from '../lib/ridein';
 import { palette, type Palette } from './palette';
+import { addFog } from './fog';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
@@ -128,6 +129,7 @@ export class GuideMap {
   /** phone layout: the panel is a document under the map, which fills the screen when opened */
   private mobile = false;
   private loaded = false;
+  private stopFog = () => {};
   /** the latest view change requested before the style had loaded or the container had a size */
   private pendingView: (() => void) | null = null;
 
@@ -185,6 +187,7 @@ export class GuideMap {
       this.addLabels();
       this.loadWater();
       this.loadParks();
+      this.stopFog = addFog(this.map);
       this.addLandmarks();
       this.paint();
       this.flushView();
@@ -220,6 +223,7 @@ export class GuideMap {
     this.clearTimers(this.timers);
     this.clearTimers(this.flyTimers);
     this.observer.disconnect();
+    this.stopFog();
     this.map.remove();
     document.body.classList.remove('names', 'tipped');
   }

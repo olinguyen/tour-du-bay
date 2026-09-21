@@ -7,7 +7,7 @@
   --rule:rgba(42,36,29,.22); --rule-2:rgba(42,36,29,.09);
   --route:#b5432a; --route-hot:#8a2c17; --halo:rgba(241,234,217,.75); --label:#4f4838; --hover:rgba(42,36,29,.035);
   /* the map's own colours: src/map/terrain.ts reads the first three and shades its tiles to them; --park fills open space under the relief */
-  --water:#c6d2cb; --coast:#8b8574; --ground:#ece3cf; --park:#dbe0bf; --map-bg:var(--water);
+  --water:#c6d2cb; --coast:#8b8574; --ground:#ece3cf; --park:#dbe0bf; --fog:#eef1f1; --map-bg:var(--water);
   /* the phone breakpoint. src/hooks.ts reads it so the query JavaScript watches matches the @media in app.css. */
   --phone-max:700px;
   --grain:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .45 0 0 0 0 .35 0 0 0 .22 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
