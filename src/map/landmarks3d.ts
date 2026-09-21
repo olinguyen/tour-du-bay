@@ -147,8 +147,8 @@ function materials(): Mats {
   });
   return {
     shadow2: new MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
-    // darker than the paper it matches: the sun and the sky together light it past white otherwise
-    land: new MeshLambertMaterial({ color: '#cfc5ae', side: DoubleSide }),
+    // the colour that the layer's warm sun and sky light to the map's --ground on level ground; slopes shade from there
+    land: new MeshLambertMaterial({ color: '#d7d6d0', side: DoubleSide }),
     ink: new LineBasicMaterial({ color: css('--ink', '#2a241c'), transparent: true, opacity: 0.3 }),
     quartz: new MeshLambertMaterial({ map: storey('#f3f0e8', '#8d969a', 5, 11) }),
     glass: new MeshLambertMaterial({ map: storey('#c6d6dd', '#f6f8f7', 0, 6) }),
@@ -513,26 +513,52 @@ const alcatraz: Landmark = {
   build(k) {
     const { w, ground, mats, column, cylinder, bar, add } = k;
     if (k.grows) {
-      // the island itself, read off the terrain on a 10 m grid, so that it grows with its buildings; at true size
-      // the terrain's own island is the one that shows
-      const X0 = -330, Z0 = -150, NX = 62, NZ = 31, STEP = 10;
-      const pos: number[] = [], idx: number[] = [], high: boolean[] = [];
-      for (let j = 0; j < NZ; j++)
-        for (let i = 0; i < NX; i++) {
-          const y = ground(X0 + i * STEP, Z0 + j * STEP);
-          pos.push(X0 + i * STEP, Math.max(y, 0), Z0 + j * STEP);
-          high.push(y > 0.5);
-        }
+      // the island itself, read off the terrain on a 15 m grid (asking the terrain is the slow part of a build), so that it grows with its buildings; at true size
+      // the terrain's own island is the one that shows. Each cell is cut where the ground meets the sea, which gives
+      // the island a coast that does not step with the grid, and the line drawn along it.
+      const X0 = -330, Z0 = -150, NX = 42, NZ = 21, STEP = 15, SEA = 0.5;
+      const h: number[] = [];
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) h.push(Math.max(ground(X0 + i * STEP, Z0 + j * STEP), 0));
+      const at = (i: number, j: number) => h[Math.min(NZ - 1, Math.max(0, j)) * NX + Math.min(NX - 1, Math.max(0, i))];
+      type P = [number, number, number, number, number, number];
+      /** a grid point with the slope's normal there, so that the island shades as one surface rather than by cell */
+      const point = (i: number, j: number): P => {
+        const nx = -(at(i + 1, j) - at(i - 1, j)) / (2 * STEP), nz = -(at(i, j + 1) - at(i, j - 1)) / (2 * STEP), n = Math.hypot(nx, 1, nz);
+        return [X0 + i * STEP, at(i, j), Z0 + j * STEP, nx / n, 1 / n, nz / n];
+      };
+      const pos: number[] = [], nor: number[] = [], coast: number[] = [];
       for (let j = 0; j < NZ - 1; j++)
         for (let i = 0; i < NX - 1; i++) {
-          const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1;
-          if (high[a] || high[b] || high[c] || high[d]) idx.push(a, c, b, b, c, d);
+          const ring = [point(i, j), point(i, j + 1), point(i + 1, j + 1), point(i + 1, j)];
+          if (!ring.some(q => q[1] > SEA)) continue;
+          const poly: P[] = [], shore: P[] = [];
+          ring.forEach((q, n) => {
+            const r = ring[(n + 1) % 4];
+            if (q[1] > SEA) poly.push(q);
+            if (q[1] > SEA !== r[1] > SEA) {
+              const t = (SEA - q[1]) / (r[1] - q[1]);
+              const cut = q.map((v, c) => v + (r[c] - v) * t) as P;
+              cut[1] = 0;
+              poly.push(cut);
+              shore.push(cut);
+            }
+          });
+          for (let n = 1; n < poly.length - 1; n++)
+            for (const q of [poly[0], poly[n], poly[n + 1]]) {
+              pos.push(q[0], q[1], q[2]);
+              nor.push(q[3], q[4], q[5]);
+            }
+          for (let n = 0; n + 1 < shore.length; n += 2) coast.push(shore[n][0], 0.3, shore[n][2], shore[n + 1][0], 0.3, shore[n + 1][2]);
         }
       const g = new BufferGeometry();
       g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-      g.setIndex(idx);
-      g.computeVertexNormals();
-      k.whenGrown.push(add(g, mats.land, 0, 0, 0));
+      g.setAttribute('normal', new Float32BufferAttribute(nor, 3));
+      const island = add(g, mats.land, 0, 0, 0);
+      const line = new BufferGeometry();
+      line.setAttribute('position', new Float32BufferAttribute(coast, 3));
+      k.geoms.push(line);
+      island.add(new LineSegments(line, mats.shore));
+      k.whenGrown.push(island);
     }
     // footprints from OpenStreetMap, as centre, size and turn in the island's frame; the prison stands 9° off its axis
     const block = (x: number, z: number, lx: number, lz: number, turn: number, h: number, pickable = false) => {
@@ -798,11 +824,35 @@ function lights(scene: Scene) {
 /** unless ?landmark=three asks for true size throughout: something 250 m tall stays about this many pixels tall however far out the map is */
 const GROW_PX = 44;
 const GROW_M = 250;
+/** from this zoom in, everything is its true size */
+const TRUE_FROM = 14.5;
 
-export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
-  const growth = (l: Landmark) => (big ? Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(map.getZoom())) / (l.grow.tall ?? GROW_M))) : 1);
+/** what the layer costs, for a page that spells out ?landmark= (see GuideMap): read by the measuring script, never shown */
+export interface LandmarkStats {
+  /** draw calls and triangles in the last frame, and the script time it took to submit them */
+  calls: number;
+  triangles: number;
+  renderMs: number;
+  /** how long the last rebuild of the models took, and how many there have been */
+  rebuildMs: number;
+  rebuilds: number;
+  /** the last build of each landmark, in ms */
+  builds: Record<string, number>;
+}
+
+export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): CustomLayerInterface {
+  const growth = (l: Landmark) => {
+    if (!big) return 1;
+    const z = map.getZoom();
+    const wanted = Math.min(l.grow.most, Math.max(1, (GROW_PX * metresPerPixel(z)) / (l.grow.tall ?? GROW_M)));
+    // a low landmark, measured by a small height, would otherwise still be grown at the zoom cap: whatever it is
+    // measured by, it eases to its true size over the zoom and a half below TRUE_FROM
+    const allowed = 1 + (l.grow.most - 1) * Math.min(1, Math.max(0, (TRUE_FROM - z) / 1.5));
+    return Math.min(wanted, allowed);
+  };
   const scaleOf = (l: Landmark, s: number): [number, number, number] => (l.grow.how === 'all' || l.grow.how === 'island' ? [s, s, s] : l.grow.how === 'up' ? [1, s, 1] : [1, s, s]);
   const camera = new PerspectiveCamera();
+  const main = new Matrix4(), modelMatrix = new Matrix4();
   const ray = new Raycaster();
   let renderer: WebGLRenderer | null = null;
   let mats: Mats | null = null;
@@ -815,14 +865,19 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
   // a grown model is scaled about its datum (the ground under its origin, or the sea), so a footing is built where
   // the scaling will carry it to the terrain that is really under it
   const groundFor =
-    (f: Frame, [sx, sy, sz]: [number, number, number] = [1, 1, 1], datum = 0): Ground =>
+    (f: Frame, memo: Map<string, number | null>, [sx, sy, sz]: [number, number, number] = [1, 1, 1], datum = 0): Ground =>
     (x0, z0, spread = 0) => {
       const x = x0 * sx, z = z0 * sz;
       const samples = spread ? [[x, z], [x - spread, z], [x + spread, z], [x, z - spread], [x, z + spread]] : [[x, z]];
       let lowest = Infinity;
       for (const [sx, sz] of samples) {
-        const [lng, lat] = f.at(sx, sz);
-        const e = map.queryTerrainElevation({ lng, lat });
+        const key = `${Math.round(sx * 10)},${Math.round(sz * 10)}`;
+        let e = memo.get(key);
+        if (e === undefined) {
+          const [lng, lat] = f.at(sx, sz);
+          e = map.queryTerrainElevation({ lng, lat });
+          memo.set(key, e);
+        }
         if (e != null) lowest = Math.min(lowest, e);
       }
       return lowest === Infinity ? 0 : (lowest - datum) / sy;
@@ -833,7 +888,32 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
       return map.queryTerrainElevation({ lng, lat });
     });
   /** the same ground, to within what a footing could show */
-  const sameFloor = (a: (number | null)[], b: (number | null)[]) => a.every((v, i) => (v == null || b[i] == null ? v === b[i] : Math.abs(v - b[i]!) < 0.25));
+  const sameFloor = (a: (number | null)[], b: (number | null)[], within = 0.25) => a.every((v, i) => (v == null || b[i] == null ? v === b[i] : Math.abs(v - b[i]!) < within));
+  // asking the terrain for a height is the slow part of a build (Alcatraz reads its island off it, the bridge stands
+  // its viaducts on it), and the answers only change when the terrain's tiles do: they are kept per landmark until
+  // the ground under it has changed. A few states are kept, not one: the terrain passes through the same ones again
+  // as its tiles come and go with the zoom.
+  const asked = new Map<Landmark, { floor: (number | null)[]; at: Map<string, number | null> }[]>();
+  const memoFor = (l: Landmark, floor: (number | null)[], within: number) => {
+    const states = asked.get(l) ?? [];
+    asked.set(l, states);
+    let m = states.find(st => sameFloor(st.floor, floor, within) && st.at.size < 20000);
+    if (!m) {
+      states.push((m = { floor, at: new Map() }));
+      if (states.length > 4) states.shift();
+    }
+    return m.at;
+  };
+  /** whether a landmark is on screen, or near enough to come on with a short pan: the rest are not worth building */
+  // by distance on the ground rather than by projecting to the screen, which is meaningless for a point past the
+  // horizon of a pitched view: within a screen and a half of the centre, plus the length of the longest landmark
+  const near = (l: Landmark) => {
+    const c = map.getCenter(), canvas = map.getCanvas();
+    const dx = (l.frame.origin[0] - c.lng) * 111_320 * Math.cos((c.lat * Math.PI) / 180), dy = (l.frame.origin[1] - c.lat) * 111_320;
+    return Math.hypot(dx, dy) < 1.5 * Math.hypot(canvas.clientWidth, canvas.clientHeight) * metresPerPixel(map.getZoom()) + 1500;
+  };
+  /** built for another zoom band and out of sight since: built again when they come near */
+  const stale = new Set<Landmark>();
   const visible = () => map.getLayer(LANDMARK_3D) !== undefined && map.getLayoutProperty(LANDMARK_3D, 'visibility') !== 'none';
 
   const dispose = (b: Built) => {
@@ -845,9 +925,13 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     const old = built.get(l);
     if (old) dispose(old);
     const s = growth(l), scale = scaleOf(l, s);
+    // a grown island shows its own copy of the ground, so what it stands on only has to agree with that copy: the
+    // metre or two by which the terrain shifts between zoom levels is not worth reading the whole island again for
+    const floor = floorOf(l), memo = memoFor(l, floor, l.grow.how === 'island' && s > 1.02 ? 3 : 0.25);
+    stale.delete(l);
     const datum = l.grow.sea ? 0 : (map.queryTerrainElevation({ lng: l.frame.origin[0], lat: l.frame.origin[1] }) ?? 0);
     // an island carries its own ground, so its footings stand where they really do and the whole of it is scaled
-    const k = kit(metresPerPixel(map.getZoom()) / scale[0], l.grow.how === 'island' ? groundFor(l.frame) : groundFor(l.frame, scale, datum), mats, big);
+    const k = kit(metresPerPixel(map.getZoom()) / scale[0], l.grow.how === 'island' ? groundFor(l.frame, memo) : groundFor(l.frame, memo, scale, datum), mats, big);
     l.build(k);
     if (big && l.grow.shadow) {
       // the sun stands north-west, as the hillshade has it: the shadow lies to the south-east, as long as the thing is tall
@@ -857,6 +941,9 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
       m.rotation.set(-Math.PI / 2, 0, -Math.PI / 4 - l.frame.rotationY, 'YXZ');
       m.position.set(out, y, 0).applyAxisAngle(Y, -Math.PI / 4 - l.frame.rotationY);
       m.renderOrder = -1;
+      // a shadow on the sea belongs to the grown island: at true size it would lie round the terrain's own island,
+      // whose shore it does not follow
+      if (l.grow.shadowOnSea) k.whenGrown.push(m);
     }
     k.group.rotation.y = l.frame.rotationY;
     k.group.position.y = datum;
@@ -865,17 +952,29 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     lights(scene);
     scene.add(k.group);
     scene.updateMatrixWorld(true);
-    built.set(l, { scene, group: k.group, whenGrown: k.whenGrown, whenTrue: k.whenTrue, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor: floorOf(l) });
+    built.set(l, { scene, group: k.group, whenGrown: k.whenGrown, whenTrue: k.whenTrue, pick: k.pick, geoms: k.geoms, mvp: old?.mvp ?? new Matrix4(), floor });
   };
   const rebuild = () => {
-    for (const l of LANDMARKS) buildOne(l);
+    const t0 = performance.now();
+    for (const l of LANDMARKS) {
+      const t1 = performance.now();
+      if (built.has(l) && !near(l)) stale.add(l);
+      else buildOne(l);
+      if (stats) stats.builds[l.name] = performance.now() - t1;
+    }
+    if (stats) {
+      stats.rebuildMs = performance.now() - t0;
+      stats.rebuilds++;
+    }
     band = Math.round(map.getZoom() * 4);
     map.triggerRepaint();
   };
   const onZoom = () => {
     window.clearTimeout(zoomTimer);
     zoomTimer = window.setTimeout(() => {
-      if (Math.round(map.getZoom() * 4) !== band) rebuild();
+      // while the terrain's tiles for the new zoom are still coming in it answers with heights that will not last:
+      // a build now would be built again on idle, so idle gets it
+      if (Math.round(map.getZoom() * 4) !== band && map.areTilesLoaded()) rebuild();
     }, 150);
   };
   // the terrain arrives after the style and after each switch to 3D, and it sharpens as its tiles come in: a model
@@ -883,10 +982,12 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
   // map is idle, it is built again on the ground that is actually there
   const onIdle = () => {
     if (!visible()) return;
+    if (Math.round(map.getZoom() * 4) !== band) return rebuild();
     let any = false;
     for (const l of LANDMARKS) {
       const b = built.get(l);
-      if (b && !sameFloor(b.floor, floorOf(l))) {
+      if (!b || !near(l)) continue;
+      if (stale.has(l) || !sameFloor(b.floor, floorOf(l))) {
         buildOne(l);
         any = true;
       }
@@ -937,6 +1038,7 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
       mats = materials();
       renderer = new WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
       renderer.autoClear = false;
+      renderer.info.autoReset = false;
       rebuild();
       map.on('zoom', onZoom);
       map.on('idle', onIdle);
@@ -957,9 +1059,11 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
     },
     render(gl, args: CustomRenderMethodInput) {
       if (!renderer) return;
+      const t0 = performance.now();
+      renderer.info.reset();
       renderer.resetState();
       renderer.setViewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      const main = new Matrix4().fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]);
+      main.fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]);
       for (const l of LANDMARKS) {
         const b = built.get(l);
         if (!b) continue;
@@ -970,10 +1074,15 @@ export function threeLandmarks(map: MlMap, big = false): CustomLayerInterface {
           for (const o of b.whenTrue) o.visible = s < 1.3;
         }
         const model = map.transform.getMatrixForModel(l.frame.origin, 0);
-        b.mvp.copy(main).multiply(new Matrix4().fromArray(model as unknown as number[]));
+        b.mvp.copy(main).multiply(modelMatrix.fromArray(model as unknown as number[]));
         camera.projectionMatrix.copy(b.mvp);
         camera.projectionMatrixInverse.copy(b.mvp).invert();
         renderer.render(b.scene, camera);
+      }
+      if (stats) {
+        stats.calls = renderer.info.render.calls;
+        stats.triangles = renderer.info.render.triangles;
+        stats.renderMs = performance.now() - t0;
       }
     },
   };

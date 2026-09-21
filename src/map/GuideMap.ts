@@ -352,7 +352,10 @@ export class GuideMap {
     if (mode === '3d' && !this.modelsRequested && (LANDMARK === 'three' || LANDMARK === 'big')) {
       this.modelsRequested = true;
       import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
-        this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big'));
+        // a page that spells out ?landmark= also gets the layer's costs to read, as it gets the map handle
+        const stats = LANDMARK_PARAM ? { calls: 0, triangles: 0, renderMs: 0, rebuildMs: 0, rebuilds: 0, builds: {} } : undefined;
+        if (stats) (window as unknown as { tdbLandmarkStats?: object }).tdbLandmarkStats = stats;
+        this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big', stats));
         this.landmarkIds = [LANDMARK_3D];
         this.showLandmarks(this.perspective);
       });
