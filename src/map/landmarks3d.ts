@@ -40,6 +40,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { esc, reducedMotion } from '../lib/html';
 import { dist, distUnit, elev, elevUnit, units } from '../lib/measure';
 import { BRIDGE, BRIDGE_COLOR, type Frame, frame, GG, cableHeight } from './landmarks';
@@ -253,7 +254,12 @@ function kit(px: number, ground: Ground, mats: Mats, inked = false): Kit {
       m.quaternion.setFromUnitVectors(Y, d.normalize());
       return m;
     },
-    tube: (pts, segments, r, mat, pickable) => add(new TubeGeometry(new CatmullRomCurve3(pts), segments, r, 6), mat, 0, 0, 0, pickable),
+    tube(pts, segments, r, mat, pickable) {
+      // a tube is round, so it has no edge to ink, and looking for one costs more than building the tube
+      const m = add(new TubeGeometry(new CatmullRomCurve3(pts), segments, r, 6), mat, 0, 0, 0);
+      if (pickable) pick.push(m);
+      return m;
+    },
     taperedBox(lx, h, lz, taper) {
       const g = new BoxGeometry(lx, h, lz);
       const p = g.attributes.position;
@@ -327,6 +333,42 @@ function kit(px: number, ground: Ground, mats: Mats, inked = false): Kit {
       return m;
     },
   };
+}
+
+/**
+ * One mesh per material for everything in a built landmark that nothing needs to reach on its own: a landmark is
+ * hundreds of small parts (every column of the Palace is one), and each part is a draw call on every frame. Left
+ * alone: what the pointer can hit (the ride keeps the bridge's deck because the deck is not among them), what is
+ * shown or hidden with the growth, and anything that carries an inked edge.
+ */
+function mergeParts(k: Kit) {
+  const keep = new Set<Object3D>([...k.pick, ...k.whenGrown, ...k.whenTrue]);
+  const byMaterial = new Map<Material, Mesh[]>();
+  for (const o of k.group.children) {
+    if (!(o instanceof Mesh) || keep.has(o) || o.children.length || Array.isArray(o.material)) continue;
+    byMaterial.set(o.material, [...(byMaterial.get(o.material) ?? []), o]);
+  }
+  for (const [material, meshes] of byMaterial) {
+    if (meshes.length < 2) continue;
+    const textured = 'map' in material && material.map != null;
+    const parts = meshes.map(m => {
+      m.updateMatrix();
+      const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+      if (!g.getAttribute('normal')) g.computeVertexNormals();
+      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && !(textured && name === 'uv')) g.deleteAttribute(name);
+      return g;
+    });
+    const merged = mergeGeometries(parts);
+    for (const g of parts) g.dispose();
+    if (!merged) continue;
+    for (const m of meshes) {
+      m.geometry.dispose();
+      k.geoms.splice(k.geoms.indexOf(m.geometry), 1);
+      k.group.remove(m);
+    }
+    k.geoms.push(merged);
+    k.group.add(new Mesh(merged, material));
+  }
 }
 
 // ---- the landmarks
@@ -411,8 +453,12 @@ const goldenGate: Landmark = {
     // the main cables and their suspenders
     for (const side of [-GG.leg, GG.leg]) {
       const pts: Vector3[] = [];
-      for (let x = -GG.anchor; x <= GG.anchor; x += 8) pts.push(new Vector3(x, cableHeight(x), side));
-      tube(pts, 320, w(GG.cableR, 0.6), mats.steel, true);
+      // the cable is a smooth curve: a point every 24 m and 160 lengths of tube draw it as well as three times as many
+      // (the tower tops, where it turns, are always among the points)
+      const xs = new Set([-GG.halfSpan, GG.halfSpan, GG.anchor]);
+      for (let x = -GG.anchor; x < GG.anchor; x += 24) if (Math.abs(Math.abs(x) - GG.halfSpan) > 12) xs.add(x);
+      for (const x of [...xs].sort((p, q) => p - q)) pts.push(new Vector3(x, cableHeight(x), side));
+      tube(pts, 160, w(GG.cableR, 0.6), mats.steel, true);
     }
     if (k.px <= SUSPENDER_MAX_PX) {
       const v: number[] = [];
@@ -838,6 +884,11 @@ export interface LandmarkStats {
   rebuilds: number;
   /** the last build of each landmark, in ms */
   builds: Record<string, number>;
+  /** geometries and textures the renderer holds: a count that climbs with every rebuild is a leak */
+  geometries: number;
+  textures: number;
+  /** the last pointer hit test, in ms */
+  pickMs: number;
 }
 
 export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): CustomLayerInterface {
@@ -933,6 +984,7 @@ export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): 
     // an island carries its own ground, so its footings stand where they really do and the whole of it is scaled
     const k = kit(metresPerPixel(map.getZoom()) / scale[0], l.grow.how === 'island' ? groundFor(l.frame, memo) : groundFor(l.frame, memo, scale, datum), mats, big);
     l.build(k);
+    mergeParts(k);
     if (big && l.grow.shadow) {
       // the sun stands north-west, as the hillshade has it: the shadow lies to the south-east, as long as the thing is tall
       const [len, wide, out] = l.grow.shadow;
@@ -1010,7 +1062,18 @@ export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): 
     }
     return null;
   };
+  let moved: MapMouseEvent | null = null;
   const onMove = (e: MapMouseEvent) => {
+    // a mouse reports far more often than the screen is drawn, and a hit test casts a ray at every part: one a frame
+    if (!moved) requestAnimationFrame(() => {
+      const last = moved!;
+      moved = null;
+      if (renderer) point(last);
+    });
+    moved = e;
+  };
+  const point = (e: MapMouseEvent) => {
+    const t0 = performance.now();
     const over = document.body.classList.contains('tipped') ? null : hit(e.point);
     if (over) {
       map.getCanvas().style.cursor = 'pointer';
@@ -1021,6 +1084,7 @@ export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): 
       tip.remove();
       map.getCanvas().style.cursor = '';
     }
+    if (stats) stats.pickMs = performance.now() - t0;
   };
   // a click on a ride line opens the ride, as anywhere else; the rest of a landmark swings to its postcard view
   const onClick = (e: MapMouseEvent) => {
@@ -1083,6 +1147,8 @@ export function threeLandmarks(map: MlMap, big = false, stats?: LandmarkStats): 
         stats.calls = renderer.info.render.calls;
         stats.triangles = renderer.info.render.triangles;
         stats.renderMs = performance.now() - t0;
+        stats.geometries = renderer.info.memory.geometries;
+        stats.textures = renderer.info.memory.textures;
       }
     },
   };

@@ -353,7 +353,7 @@ export class GuideMap {
       this.modelsRequested = true;
       import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
         // a page that spells out ?landmark= also gets the layer's costs to read, as it gets the map handle
-        const stats = LANDMARK_PARAM ? { calls: 0, triangles: 0, renderMs: 0, rebuildMs: 0, rebuilds: 0, builds: {} } : undefined;
+        const stats = LANDMARK_PARAM ? { calls: 0, triangles: 0, renderMs: 0, rebuildMs: 0, rebuilds: 0, builds: {}, geometries: 0, textures: 0, pickMs: 0 } : undefined;
         if (stats) (window as unknown as { tdbLandmarkStats?: object }).tdbLandmarkStats = stats;
         this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big', stats));
         this.landmarkIds = [LANDMARK_3D];

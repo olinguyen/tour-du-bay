@@ -186,6 +186,7 @@ const MARKS: Mark[] = [
   },
   // ---- 2D only, the second batch
   {
+    // the one drawing in colours of its own: the row is known by them, and in ink it read as the Conservatory's twin
     name: 'The Painted Ladies',
     note: 'Alamo Square, 1890s',
     at: [-122.432786, 37.776224],
@@ -193,7 +194,7 @@ const MARKS: Mark[] = [
     h: 16,
     from: 12,
     only2d: true,
-    svg: `<path ${INK} d="M1 16 V7 L4 2.5 L7 7 V16 Z M8 16 V7 L11 2.5 L14 7 V16 Z M15 16 V7 L18 2.5 L21 7 V16 Z M22 16 V7 L25 2.5 L28 7 V16 Z"/><path fill="var(--page)" d="M3 9 H5 V12 H3 Z M10 9 H12 V12 H10 Z M17 9 H19 V12 H17 Z M24 9 H26 V12 H24 Z"/>`,
+    svg: `<path fill="#d3a79c" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M1 16 V7 L4 2.5 L7 7 V16 Z"/><path fill="#9fb4c6" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M8 16 V7 L11 2.5 L14 7 V16 Z"/><path fill="#d6c58a" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M15 16 V7 L18 2.5 L21 7 V16 Z"/><path fill="#a9bfa2" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M22 16 V7 L25 2.5 L28 7 V16 Z"/><path fill="var(--page)" d="M3 9 H5 V12 H3 Z M10 9 H12 V12 H10 Z M17 9 H19 V12 H17 Z M24 9 H26 V12 H24 Z"/>`,
   },
   {
     name: 'Conservatory of Flowers',
