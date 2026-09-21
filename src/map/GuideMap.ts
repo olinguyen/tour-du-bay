@@ -15,9 +15,12 @@ import { palette, type Palette } from './palette';
 import { coastlines, LYR, mapStyle, SRC } from './style';
 import { addExtrudedLandmarks, LANDMARK_LYR } from './landmarks';
 
-/** which landmark layer draws: ?landmark=three (the default), big (PROTOTYPE: grown when zoomed out, shadowed, inked), extrude, or none */
+/**
+ * which landmarks draw: ?landmark=big (the default: models that grow as the map zooms out, shadowed and inked, and the
+ * drawn silhouettes), three (the models alone, at true size), extrude (the first prototype), or none
+ */
 const LANDMARK_PARAM = new URLSearchParams(location.search).get('landmark');
-const LANDMARK = LANDMARK_PARAM ?? 'three';
+const LANDMARK = LANDMARK_PARAM ?? 'big';
 
 const HOME: [LatLng, LatLng] = [[37.32, -122.76], [38.08, -121.85]];
 /** how far the map can be panned; src/data/map-bounds.json is also what scripts/fetch-water.mjs covers */
@@ -329,23 +332,31 @@ export class GuideMap {
     this.paintNames();
   }
 
-  /** PROTOTYPE: the Golden Gate, shown in 3D only (from above an extrusion is just its footprint) */
+  /**
+   * The landmarks: three.js models in 3D, and small drawn silhouettes where there are no models to see (2D, and 3D from
+   * far out). The silhouettes are a few KB and load with the map; the models bring three.js with them, so they load
+   * the first time the reader is in 3D and never for one who stays in 2D.
+   */
   private landmarkIds: string[] = [];
+  private modelsRequested = false;
   private addLandmarks() {
     if (LANDMARK === 'extrude') {
       addExtrudedLandmarks(this.map);
       this.landmarkIds = [LANDMARK_LYR];
-      this.showLandmarks(this.perspective);
-    } else if (LANDMARK === 'three' || LANDMARK === 'big') {
+    } else if (LANDMARK === 'big') {
+      import('./landmarkMarks').then(({ addLandmarkMarks }) => addLandmarkMarks(this.map));
+    }
+    this.showLandmarks(this.perspective);
+  }
+  private showLandmarks(mode: Perspective) {
+    if (mode === '3d' && !this.modelsRequested && (LANDMARK === 'three' || LANDMARK === 'big')) {
+      this.modelsRequested = true;
       import('./landmarks3d').then(({ threeLandmarks, LANDMARK_3D }) => {
         this.map.addLayer(threeLandmarks(this.map, LANDMARK === 'big'));
-        if (LANDMARK === 'big') import('./landmarkMarks').then(({ addLandmarkMarks }) => addLandmarkMarks(this.map));
         this.landmarkIds = [LANDMARK_3D];
         this.showLandmarks(this.perspective);
       });
     }
-  }
-  private showLandmarks(mode: Perspective) {
     for (const id of this.landmarkIds) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', mode === '3d' ? 'visible' : 'none');
   }
 

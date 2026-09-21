@@ -34,4 +34,6 @@ ordinary npm dependency that the page loads only once the reader is in 3D. Every
 dimensions (the bridge district's for the Golden Gate Bridge, the National Register descriptions for the rest): no
 model file, texture or photograph is downloaded. Where Sutro Tower, the buildings on Alcatraz, the Palace of Fine
 Arts, the Transamerica Pyramid and Salesforce Tower stand, the Palace's plan and the outline of its lagoon are measured from OpenStreetMap's building and water
-outlines (© OpenStreetMap contributors, ODbL, as above; retrieved September 20, 2026).
+outlines (© OpenStreetMap contributors, ODbL, as above; retrieved September 20, 2026). The small landmark drawings on the
+map (`src/map/landmarkMarks.ts`) are drawn in code as inline SVG and stand at coordinates looked up in OpenStreetMap
+the same day.
