@@ -186,6 +186,7 @@ const MARKS: Mark[] = [
   },
   // ---- 2D only, the second batch
   {
+    // the one drawing in colours of its own: the row is known by them, and in ink it read as the Conservatory's twin
     name: 'The Painted Ladies',
     note: 'Alamo Square, 1890s',
     at: [-122.432786, 37.776224],
@@ -193,7 +194,7 @@ const MARKS: Mark[] = [
     h: 16,
     from: 12,
     only2d: true,
-    svg: `<path ${INK} d="M1 16 V7 L4 2.5 L7 7 V16 Z M8 16 V7 L11 2.5 L14 7 V16 Z M15 16 V7 L18 2.5 L21 7 V16 Z M22 16 V7 L25 2.5 L28 7 V16 Z"/><path fill="var(--page)" d="M3 9 H5 V12 H3 Z M10 9 H12 V12 H10 Z M17 9 H19 V12 H17 Z M24 9 H26 V12 H24 Z"/>`,
+    svg: `<path fill="#d3a79c" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M1 16 V7 L4 2.5 L7 7 V16 Z"/><path fill="#9fb4c6" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M8 16 V7 L11 2.5 L14 7 V16 Z"/><path fill="#d6c58a" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M15 16 V7 L18 2.5 L21 7 V16 Z"/><path fill="#a9bfa2" stroke="var(--ink-2)" stroke-width="0.7" stroke-linejoin="round" d="M22 16 V7 L25 2.5 L28 7 V16 Z"/><path fill="var(--page)" d="M3 9 H5 V12 H3 Z M10 9 H12 V12 H10 Z M17 9 H19 V12 H17 Z M24 9 H26 V12 H24 Z"/>`,
   },
   {
     name: 'Conservatory of Flowers',
@@ -202,6 +203,8 @@ const MARKS: Mark[] = [
     w: 32,
     h: 16,
     from: 12,
+    // above its place: with a ride's way in shown, the Panhandle's name is written across it
+    nudge: [0, 22],
     only2d: true,
     svg: `<path ${INK} d="M10 10.5 A6 7.5 0 0 1 22 10.5 Z M0 10.5 Q5 6.5 10 10.5 Z M22 10.5 Q27 6.5 32 10.5 Z M0 10.5 H32 V16 H0 Z M15.6 0 H16.4 V3.4 H15.6 Z"/><path fill="var(--page)" d="M2 12 H8 V13 H2 Z M12 12 H20 V13 H12 Z M24 12 H30 V13 H24 Z"/>`,
   },
@@ -290,7 +293,8 @@ const MODELS_FROM = 9.9;
  * stands in for a model at the home view, it flies to the model's postcard.
  */
 export function addLandmarkMarks(map: MlMap): Marker[] {
-  const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', anchor: 'bottom', maxWidth: 'none' });
+  // no fixed anchor: MapLibre then opens the tooltip on whichever side keeps it on the map, which matters on a phone
+  const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', maxWidth: 'none' });
   let pinned = false;
   let justPinned = false;
   let shown: Mark | null = null;
@@ -299,11 +303,18 @@ export function addLandmarkMarks(map: MlMap): Marker[] {
     const box = map.getContainer().getBoundingClientRect();
     return map.queryRenderedFeatures([e.clientX - box.left, e.clientY - box.top], { layers: [LYR.routeHit] }).length > 0;
   };
+  /** the tooltip's offset for each side it may open on, so that it clears the drawing, which stands above its place */
+  const clearOf = (m: Mark) => {
+    const [dx, dy] = m.nudge ?? [0, 0];
+    const above: [number, number] = [dx, -(m.h + dy + 6)], below: [number, number] = [dx, 6 - Math.min(dy, 0)];
+    const mid = -(m.h / 2 + dy);
+    return { bottom: above, 'bottom-left': above, 'bottom-right': above, top: below, 'top-left': below, 'top-right': below, left: [dx + m.w / 2 + 6, mid] as [number, number], right: [dx - m.w / 2 - 6, mid] as [number, number], center: above };
+  };
   const show = (m: Mark) => {
     shown = m;
     tip
       .setLngLat(m.at)
-      .setOffset([m.nudge?.[0] ?? 0, -(m.h + (m.nudge?.[1] ?? 0) + 6)])
+      .setOffset(clearOf(m))
       .setHTML(`<span>${esc(m.name)}</span><small>${esc(m.note)}</small>`)
       .addTo(map);
   };
