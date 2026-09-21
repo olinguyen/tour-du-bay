@@ -12,6 +12,8 @@ const W = -123.3, E = -121.9, N = 38.25, S = 37.15;
 const SIZE = 512, TILE = 256;
 /** frames a second: fog is slow, and every frame is a repaint of the whole map */
 const FPS = 12;
+/** the fog's shadow: how far it falls, in canvas px (about 1 km each), and how dark */
+const SHADOW_DX = 4, SHADOW_DY = 6, SHADOW_ALPHA = 0.4;
 /** the zoom by which the fog has lifted; nothing is drawn past it */
 const CLEAR_ZOOM = 12.5;
 
@@ -49,9 +51,9 @@ function tile(seed: number, rgb: [number, number, number], floor: number): HTMLC
   const c = document.createElement('canvas');
   c.width = c.height = TILE;
   const ctx = c.getContext('2d')!, img = ctx.createImageData(TILE, TILE), n = noise(seed);
-  // the ramp is set from the noise itself, and wide (its 5th percentile to its 97th): a narrow one gives banks with
-  // firm edges and flat tops, which is cloud, not fog
-  const sorted = Float32Array.from(n).sort(), lo = sorted[Math.floor(n.length * 0.05)], hi = sorted[Math.floor(n.length * 0.97)];
+  // the ramp is set from the noise itself, its 10th percentile to its 80th: narrower and the banks get firm edges and
+  // flat tops, which is cloud, not fog; wider and the fog is too thin to see on paper this pale
+  const sorted = Float32Array.from(n).sort(), lo = sorted[Math.floor(n.length * 0.1)], hi = sorted[Math.floor(n.length * 0.8)];
   for (let i = 0; i < n.length; i++) {
     const t = Math.max(0, Math.min(1, (n[i] - lo) / (hi - lo))), a = t * t * (3 - 2 * t);
     img.data.set([rgb[0], rgb[1], rgb[2], 255 * (floor + (1 - floor) * a)], i * 4);
@@ -68,10 +70,10 @@ function mask(): HTMLCanvasElement {
   const x = (lon: number) => ((lon - W) / (E - W)) * SIZE, y = (lat: number) => ((N - lat) / (N - S)) * SIZE;
   const sea = ctx.createLinearGradient(0, 0, SIZE, 0);
   sea.addColorStop(0, 'rgba(0,0,0,1)');
-  sea.addColorStop(x(-122.6) / SIZE, 'rgba(0,0,0,.95)');
-  sea.addColorStop(x(-122.4) / SIZE, 'rgba(0,0,0,.65)');
-  sea.addColorStop(x(-122.22) / SIZE, 'rgba(0,0,0,.3)');
-  sea.addColorStop(x(-122.02) / SIZE, 'rgba(0,0,0,0)');
+  sea.addColorStop(x(-122.5) / SIZE, 'rgba(0,0,0,1)');
+  sea.addColorStop(x(-122.34) / SIZE, 'rgba(0,0,0,.85)');
+  sea.addColorStop(x(-122.18) / SIZE, 'rgba(0,0,0,.45)');
+  sea.addColorStop(x(-121.98) / SIZE, 'rgba(0,0,0,0)');
   ctx.fillStyle = sea;
   ctx.fillRect(0, 0, SIZE, SIZE);
   // through the Golden Gate and out across the Bay towards Berkeley
@@ -106,28 +108,46 @@ function spread(ctx: CanvasRenderingContext2D, t: HTMLCanvasElement, scale: numb
 
 /** Adds the fog under the routes and starts it drifting. Returns what stops it. */
 export function addFog(map: MlMap): () => void {
-  const css = getComputedStyle(document.documentElement).getPropertyValue('--fog').trim() || '#eef1f1';
+  const swatch = (name: string, dflt: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || dflt;
+  const css = swatch('--fog', '#f7f9f9'), shadow = swatch('--fog-shadow', '#5d6f7a');
   const rgb = [1, 3, 5].map(i => parseInt(css.slice(i, i + 2), 16)) as [number, number, number];
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d')!;
   // two sheets of noise at different sizes and speeds, one multiplied into the other, so the wisps change as they drift
-  const body = tile(7, rgb, 0), breakup = tile(1913, rgb, 0.5), lie = mask();
+  const body = tile(7, rgb, 0), breakup = tile(1913, rgb, 0.65), lie = mask();
 
   // destination-in keeps only what each draw covers, so the tiled sheet is laid out whole before it is multiplied in
   const sheet = document.createElement('canvas');
   sheet.width = sheet.height = SIZE;
   const sheetCtx = sheet.getContext('2d')!;
 
+  // the fog is composed on its own canvas, then laid over its shadow: white on cream has nothing to push against, and
+  // a soft cool shadow to the south-east is what lets the eye find the fog's edge
+  const bank = document.createElement('canvas');
+  bank.width = bank.height = SIZE;
+  const bankCtx = bank.getContext('2d')!;
+
   const draw = (t: number) => {
     sheetCtx.clearRect(0, 0, SIZE, SIZE);
     spread(sheetCtx, breakup, 1.5, -37, t * 11, -t * 2);
+    bankCtx.globalCompositeOperation = 'source-over';
+    bankCtx.clearRect(0, 0, SIZE, SIZE);
+    spread(bankCtx, body, 2.4, 23, t * 5, t * 1.2);
+    bankCtx.globalCompositeOperation = 'destination-in';
+    bankCtx.drawImage(sheet, 0, 0);
+    bankCtx.drawImage(lie, 0, 0);
+
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, SIZE, SIZE);
-    spread(ctx, body, 2.4, 23, t * 5, t * 1.2);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(sheet, 0, 0);
-    ctx.drawImage(lie, 0, 0);
+    ctx.globalAlpha = SHADOW_ALPHA;
+    ctx.drawImage(bank, SHADOW_DX, SHADOW_DY);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = shadow;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(bank, 0, 0);
   };
   draw(0);
 
