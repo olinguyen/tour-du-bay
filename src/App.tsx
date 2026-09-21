@@ -423,7 +423,7 @@ export default function App() {
         </div>
         <div className="legend" aria-hidden="true">
           <div className="l-list">
-            <div><i />a ride worth your weekend</div>
+            <div><i />a ride in the guide</div>
             <div><b className="tr" />a start you can reach by BART</div>
           </div>
           <div className="l-ride">
