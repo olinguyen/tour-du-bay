@@ -202,6 +202,8 @@ const MARKS: Mark[] = [
     w: 32,
     h: 16,
     from: 12,
+    // above its place: with a ride's way in shown, the Panhandle's name is written across it
+    nudge: [0, 22],
     only2d: true,
     svg: `<path ${INK} d="M10 10.5 A6 7.5 0 0 1 22 10.5 Z M0 10.5 Q5 6.5 10 10.5 Z M22 10.5 Q27 6.5 32 10.5 Z M0 10.5 H32 V16 H0 Z M15.6 0 H16.4 V3.4 H15.6 Z"/><path fill="var(--page)" d="M2 12 H8 V13 H2 Z M12 12 H20 V13 H12 Z M24 12 H30 V13 H24 Z"/>`,
   },
@@ -290,7 +292,8 @@ const MODELS_FROM = 9.9;
  * stands in for a model at the home view, it flies to the model's postcard.
  */
 export function addLandmarkMarks(map: MlMap): Marker[] {
-  const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', anchor: 'bottom', maxWidth: 'none' });
+  // no fixed anchor: MapLibre then opens the tooltip on whichever side keeps it on the map, which matters on a phone
+  const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'ride-tip', maxWidth: 'none' });
   let pinned = false;
   let justPinned = false;
   let shown: Mark | null = null;
@@ -299,11 +302,18 @@ export function addLandmarkMarks(map: MlMap): Marker[] {
     const box = map.getContainer().getBoundingClientRect();
     return map.queryRenderedFeatures([e.clientX - box.left, e.clientY - box.top], { layers: [LYR.routeHit] }).length > 0;
   };
+  /** the tooltip's offset for each side it may open on, so that it clears the drawing, which stands above its place */
+  const clearOf = (m: Mark) => {
+    const [dx, dy] = m.nudge ?? [0, 0];
+    const above: [number, number] = [dx, -(m.h + dy + 6)], below: [number, number] = [dx, 6 - Math.min(dy, 0)];
+    const mid = -(m.h / 2 + dy);
+    return { bottom: above, 'bottom-left': above, 'bottom-right': above, top: below, 'top-left': below, 'top-right': below, left: [dx + m.w / 2 + 6, mid] as [number, number], right: [dx - m.w / 2 - 6, mid] as [number, number], center: above };
+  };
   const show = (m: Mark) => {
     shown = m;
     tip
       .setLngLat(m.at)
-      .setOffset([m.nudge?.[0] ?? 0, -(m.h + (m.nudge?.[1] ?? 0) + 6)])
+      .setOffset(clearOf(m))
       .setHTML(`<span>${esc(m.name)}</span><small>${esc(m.note)}</small>`)
       .addTo(map);
   };
