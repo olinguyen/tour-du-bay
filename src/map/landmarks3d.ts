@@ -1,4 +1,4 @@
-// PROTOTYPE: landmarks as three.js scenes drawn through one MapLibre custom layer, loaded on demand from GuideMap so
+// Landmarks as three.js scenes drawn through one MapLibre custom layer, loaded on demand from GuideMap so
 // three.js (~140 KB gzipped) only arrives once the reader is in 3D. Each landmark is built from published dimensions
 // rather than a downloaded model, in its own frame (metres from an origin, x along a bearing, y up from sea level, z
 // across to the right). Every footing stands on the map's own terrain mesh, thin members keep a minimum size in
@@ -88,7 +88,7 @@ interface Mats {
   shadow: Material;
   /** the open screen that carries a glass tower's walls on past its roof */
   crown: Material;
-  /** PROTOTYPE (?landmark=big): a soft shadow laid on the ground, and an inked edge on the main masses */
+  /** a soft shadow laid on the ground, and an inked edge on the main masses */
   shadow2: Material;
   ink: Material;
   /** the map's own ground colour, for an island that grows with what stands on it */
@@ -187,7 +187,7 @@ interface Kit {
   pick: Object3D[];
   /** every geometry made, so it can be disposed on a rebuild */
   geoms: BufferGeometry[];
-  /** PROTOTYPE (?landmark=big): whether landmarks grow, and what is drawn only while one is grown or only at its true size */
+  /** whether landmarks grow, and what is drawn only while one is grown or only at its true size */
   grows: boolean;
   whenGrown: Object3D[];
   whenTrue: Object3D[];
@@ -339,7 +339,7 @@ interface Landmark {
   /** the view a click flies to */
   postcard: { center: [number, number]; zoom: number; pitch: number; bearing: number };
   /**
-   * PROTOTYPE (?landmark=big): how it grows when the map is zoomed out. 'all' grows every way about its foot, 'up'
+   * How it grows when the map is zoomed out. 'all' grows every way about its foot, 'up'
    * only upwards (its plan is tied to the ground it stands on), 'across' upwards and across its axis but not along it
    * (the bridge, whose length is the strait's), 'island' every way about sea level together with its own copy of the
    * ground it stands on; `most` caps the growth, `tall` is the height that is kept at GROW_PX pixels (250 m unless given), and `shadow` is
@@ -795,7 +795,7 @@ function lights(scene: Scene) {
   scene.add(sun, new HemisphereLight('#fff9ef', '#b8a98c', 1.5));
 }
 
-/** PROTOTYPE (?landmark=big): something 250 m tall stays about this many pixels tall however far out the map is */
+/** unless ?landmark=three asks for true size throughout: something 250 m tall stays about this many pixels tall however far out the map is */
 const GROW_PX = 44;
 const GROW_M = 250;
 

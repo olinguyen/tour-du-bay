@@ -1,4 +1,4 @@
-// PROTOTYPE (?landmark=big): a small drawn silhouette for each landmark, for when the map is too far out for the 3D
+// A small drawn silhouette for each landmark, for when the map is too far out for the 3D
 // models to read (and for 2D, which has no models at all). Inline SVG in HTML markers, like the start dots: no image
 // file, nothing new for the CSP.
 import maplibregl, { type Map as MlMap, type Marker } from 'maplibre-gl';
